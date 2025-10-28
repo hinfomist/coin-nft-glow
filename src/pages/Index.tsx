@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Moon, Sun, Share2, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Search, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CryptoTickerTable } from "@/components/CryptoTickerTable";
 import { NFTTable } from "@/components/NFTTable";
 import { PortfolioTable } from "@/components/PortfolioTable";
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "react-router-dom";
 
 const COIN_EMOJIS: Record<string, string> = {
   bitcoin: "₿",
@@ -160,14 +162,23 @@ const Index = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const coinParam = urlParams.get("coin");
     const nftParam = urlParams.get("nft");
+    const tabParam = urlParams.get("tab");
 
-    if (nftParam) {
+    if (tabParam === "portfolio") {
+      setMode("portfolio");
+    } else if (nftParam || tabParam === "nft") {
       setMode("nft");
-      setSearchQuery(nftParam);
-      fetchNFTData(nftParam);
-    } else if (coinParam) {
+      if (nftParam) {
+        setSearchQuery(nftParam);
+        fetchNFTData(nftParam);
+      }
+    } else if (coinParam || tabParam === "crypto") {
       setMode("crypto");
-      fetchCryptoData([coinParam]);
+      if (coinParam) {
+        fetchCryptoData([coinParam]);
+      } else {
+        fetchCryptoData(DEFAULT_COINS);
+      }
     } else {
       fetchCryptoData(DEFAULT_COINS);
     }
@@ -221,116 +232,170 @@ const Index = () => {
     });
   };
 
+  // Generate JSON-LD schema
+  const generateSchema = () => {
+    if (mode === "crypto" && cryptoData.length > 0) {
+      return {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "itemListElement": cryptoData.map((coin, index) => ({
+          "@type": "Product",
+          "position": index + 1,
+          "name": coin.name,
+          "description": `${coin.name} (${coin.symbol.toUpperCase()}) live price and 24h change`,
+          "offers": {
+            "@type": "Offer",
+            "price": coin.price,
+            "priceCurrency": "USD"
+          }
+        }))
+      };
+    } else if (mode === "nft" && nftData) {
+      return {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": nftData.name,
+        "description": nftData.description || `${nftData.name} NFT collection floor price and stats`,
+        "image": nftData.image,
+        "offers": {
+          "@type": "Offer",
+          "price": nftData.floorPrice,
+          "priceCurrency": "USD"
+        }
+      };
+    }
+    return null;
+  };
+
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-3xl">⚡</span>
-            <h1 className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              CryptoFlash
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setDarkMode(!darkMode)}
-              className="rounded-full"
-            >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleShare}
-              className="rounded-full"
-            >
-              <Share2 className="w-5 h-5" />
-            </Button>
-          </div>
-        </div>
-      </header>
+      {/* JSON-LD Schema */}
+      {generateSchema() && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(generateSchema()) }}
+        />
+      )}
+
+      {/* AdSense Script */}
+      <script
+        async
+        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_ID"
+        crossOrigin="anonymous"
+      />
+
+      <Navbar darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} onShare={handleShare} />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 max-w-5xl">
-        {/* Hero Section */}
-        <div className="text-center mb-8 space-y-4">
-          <h2 className="text-4xl md:text-5xl font-bold mb-2">
-            {mode === "portfolio" ? "Your Portfolio" : `Live ${mode === "crypto" ? "Crypto" : "NFT"} Prices`}
-          </h2>
-          <p className="text-muted-foreground text-lg">
-            {mode === "portfolio" ? "Track your investments in real-time" : "Real-time tracking. No ads. No sign-ups. Just data."}
-          </p>
-        </div>
+        <div className="grid md:grid-cols-[1fr_300px] gap-8">
+          <div>
+            {/* Hero Section */}
+            <div className="text-center mb-8 space-y-4">
+              <h1 className="text-4xl md:text-5xl font-bold mb-2">
+                {mode === "portfolio" ? "Your Portfolio" : `Live ${mode === "crypto" ? "Crypto" : "NFT"} Prices`}
+              </h1>
+              <p className="text-muted-foreground text-lg">
+                {mode === "portfolio" 
+                  ? "Track your investments in real-time" 
+                  : "Real-time tracking. No ads. No sign-ups. Just data."}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Built with ❤️ by{" "}
+                <a
+                  href="https://x.com/hamzaaslam"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Hamza Aslam
+                </a>
+              </p>
+            </div>
 
-        {/* Mode Toggle */}
-        <div className="flex justify-center mb-6">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "crypto" | "nft" | "portfolio")}>
-            <TabsList className="grid w-[420px] grid-cols-3">
-              <TabsTrigger value="crypto">💰 Crypto</TabsTrigger>
-              <TabsTrigger value="nft">🖼️ NFTs</TabsTrigger>
-              <TabsTrigger value="portfolio">📊 Portfolio</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
+            {/* Mode Toggle */}
+            <div className="flex justify-center mb-6">
+              <Tabs value={mode} onValueChange={(v) => setMode(v as "crypto" | "nft" | "portfolio")}>
+                <TabsList className="grid w-[420px] grid-cols-3">
+                  <TabsTrigger value="crypto">💰 Crypto</TabsTrigger>
+                  <TabsTrigger value="nft">🖼️ NFTs</TabsTrigger>
+                  <TabsTrigger value="portfolio">📊 Portfolio</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
 
-        {/* Search Bar */}
-        {mode !== "portfolio" && (
-          <div className="relative mb-8 max-w-2xl mx-auto">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-            <Input
-              type="text"
-              placeholder={
-                mode === "crypto"
-                  ? "Search any crypto (e.g., BTC, ETH, SOL)..."
-                  : "Search NFT collection (e.g., bored-ape-yacht-club)..."
-              }
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 h-14 text-lg rounded-xl"
-            />
-            {isLoading && (
-              <Loader2 className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-primary" />
+            {/* Search Bar */}
+            {mode !== "portfolio" && (
+              <div className="relative mb-8 max-w-2xl mx-auto">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+                <Input
+                  type="text"
+                  placeholder={
+                    mode === "crypto"
+                      ? "Search any crypto (e.g., BTC, ETH, SOL)..."
+                      : "Search NFT collection (e.g., bored-ape-yacht-club)..."
+                  }
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-12 h-14 text-lg rounded-xl"
+                />
+                {isLoading && (
+                  <Loader2 className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-primary" />
+                )}
+              </div>
+            )}
+
+            {/* Data Display */}
+            <div className="mb-8">
+              {mode === "crypto" ? (
+                <CryptoTickerTable data={cryptoData} isLoading={isLoading} />
+              ) : mode === "nft" ? (
+                <NFTTable data={nftData} isLoading={isLoading} />
+              ) : (
+                <PortfolioTable onFetchPrice={fetchPriceForPortfolio} />
+              )}
+            </div>
+
+            {/* Last Updated */}
+            <div className="text-center text-sm text-muted-foreground mb-8">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </div>
+
+            {/* CTA to Portfolio */}
+            {mode !== "portfolio" && (
+              <div className="mt-8 p-6 border border-border rounded-xl bg-card text-center">
+                <h3 className="text-xl font-bold mb-2">Track Your Portfolio</h3>
+                <p className="text-muted-foreground mb-4">
+                  Add your holdings and see real-time P&L with visual charts
+                </p>
+                <Link
+                  to="/?tab=portfolio"
+                  onClick={() => setMode("portfolio")}
+                  className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Start Tracking →
+                </Link>
+              </div>
             )}
           </div>
-        )}
 
-        {/* Data Display */}
-        <div className="mb-8">
-          {mode === "crypto" ? (
-            <CryptoTickerTable data={cryptoData} isLoading={isLoading} />
-          ) : mode === "nft" ? (
-            <NFTTable data={nftData} isLoading={isLoading} />
-          ) : (
-            <PortfolioTable onFetchPrice={fetchPriceForPortfolio} />
-          )}
+          {/* Sidebar AdSense */}
+          <aside className="hidden md:block">
+            <div className="sticky top-24">
+              <ins
+                className="adsbygoogle"
+                style={{ display: "block" }}
+                data-ad-client="ca-pub-YOUR_ID"
+                data-ad-slot="YOUR_SLOT"
+                data-ad-format="auto"
+                data-full-width-responsive="true"
+              />
+            </div>
+          </aside>
         </div>
-
-        {/* Last Updated */}
-        <div className="text-center text-sm text-muted-foreground mb-8">
-          Last updated: {lastUpdated.toLocaleTimeString()}
-        </div>
-
-        {/* Footer */}
-        <footer className="text-center space-y-4 pt-8 border-t border-border">
-          <p className="text-sm text-muted-foreground">
-            Powered by{" "}
-            <a
-              href="https://www.coingecko.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              CoinGecko
-            </a>
-          </p>
-          <div className="text-xs text-muted-foreground">
-            Free forever. Built with ⚡ by crypto enthusiasts.
-          </div>
-        </footer>
       </main>
+
+      <Footer />
     </div>
   );
 };
