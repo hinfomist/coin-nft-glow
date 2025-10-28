@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CryptoTickerTable } from "@/components/CryptoTickerTable";
 import { NFTTable } from "@/components/NFTTable";
+import { PortfolioTable } from "@/components/PortfolioTable";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -46,7 +47,7 @@ interface NFTData {
 }
 
 const Index = () => {
-  const [mode, setMode] = useState<"crypto" | "nft">("crypto");
+  const [mode, setMode] = useState<"crypto" | "nft" | "portfolio">("crypto");
   const [darkMode, setDarkMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [cryptoData, setCryptoData] = useState<CryptoData[]>([]);
@@ -62,6 +63,14 @@ const Index = () => {
       document.documentElement.classList.remove("dark");
     }
   }, [darkMode]);
+
+  const fetchPriceForPortfolio = async (id: string) => {
+    const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true`);
+    const data = await response.json();
+    const coinInfo = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${id}`);
+    const coinData = await coinInfo.json();
+    return { price: data[id]?.usd || 0, change24h: data[id]?.usd_24h_change || 0, name: coinData[0]?.name || id, symbol: coinData[0]?.symbol || id };
+  };
 
   const fetchCryptoData = useCallback(async (coins: string[]) => {
     setIsLoading(true);
@@ -249,48 +258,53 @@ const Index = () => {
         {/* Hero Section */}
         <div className="text-center mb-8 space-y-4">
           <h2 className="text-4xl md:text-5xl font-bold mb-2">
-            Live {mode === "crypto" ? "Crypto" : "NFT"} Prices
+            {mode === "portfolio" ? "Your Portfolio" : `Live ${mode === "crypto" ? "Crypto" : "NFT"} Prices`}
           </h2>
           <p className="text-muted-foreground text-lg">
-            Real-time tracking. No ads. No sign-ups. Just data.
+            {mode === "portfolio" ? "Track your investments in real-time" : "Real-time tracking. No ads. No sign-ups. Just data."}
           </p>
         </div>
 
         {/* Mode Toggle */}
         <div className="flex justify-center mb-6">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "crypto" | "nft")}>
-            <TabsList className="grid w-[280px] grid-cols-2">
+          <Tabs value={mode} onValueChange={(v) => setMode(v as "crypto" | "nft" | "portfolio")}>
+            <TabsList className="grid w-[420px] grid-cols-3">
               <TabsTrigger value="crypto">💰 Crypto</TabsTrigger>
               <TabsTrigger value="nft">🖼️ NFTs</TabsTrigger>
+              <TabsTrigger value="portfolio">📊 Portfolio</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
         {/* Search Bar */}
-        <div className="relative mb-8 max-w-2xl mx-auto">
-          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-          <Input
-            type="text"
-            placeholder={
-              mode === "crypto"
-                ? "Search any crypto (e.g., BTC, ETH, SOL)..."
-                : "Search NFT collection (e.g., bored-ape-yacht-club)..."
-            }
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-12 h-14 text-lg rounded-xl"
-          />
-          {isLoading && (
-            <Loader2 className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-primary" />
-          )}
-        </div>
+        {mode !== "portfolio" && (
+          <div className="relative mb-8 max-w-2xl mx-auto">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+            <Input
+              type="text"
+              placeholder={
+                mode === "crypto"
+                  ? "Search any crypto (e.g., BTC, ETH, SOL)..."
+                  : "Search NFT collection (e.g., bored-ape-yacht-club)..."
+              }
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-12 h-14 text-lg rounded-xl"
+            />
+            {isLoading && (
+              <Loader2 className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-primary" />
+            )}
+          </div>
+        )}
 
         {/* Data Display */}
         <div className="mb-8">
           {mode === "crypto" ? (
             <CryptoTickerTable data={cryptoData} isLoading={isLoading} />
-          ) : (
+          ) : mode === "nft" ? (
             <NFTTable data={nftData} isLoading={isLoading} />
+          ) : (
+            <PortfolioTable onFetchPrice={fetchPriceForPortfolio} />
           )}
         </div>
 
