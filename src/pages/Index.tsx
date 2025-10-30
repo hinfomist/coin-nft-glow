@@ -1,14 +1,23 @@
 import { useState, useEffect, useCallback } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, Lock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { CryptoTickerTable } from "@/components/CryptoTickerTable";
 import { NFTTable } from "@/components/NFTTable";
 import { PortfolioTable } from "@/components/PortfolioTable";
+import { AlertModal, PriceAlert } from "@/components/AlertModal";
+import { AlertsTable } from "@/components/AlertsTable";
+import { UserProfile } from "@/components/UserProfile";
+import { PricingModal } from "@/components/PricingModal";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { apiService, type CryptoData, type NFTData, type PortfolioPriceData } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import emailjs from '@emailjs/browser';
 
 const COIN_EMOJIS: Record<string, string> = {
   bitcoin: "₿",
@@ -20,43 +29,52 @@ const COIN_EMOJIS: Record<string, string> = {
 
 const DEFAULT_COINS = ["bitcoin", "ethereum", "solana", "dogecoin", "cardano"];
 
-interface CryptoData {
-  id: string;
-  name: string;
-  symbol: string;
-  emoji: string;
-  price: number;
-  change24h: number;
-  marketCap: number;
-}
-
-interface NFTData {
-  id: string;
-  name: string;
-  symbol: string;
-  image: string;
-  description: string;
-  floorPrice: number;
-  floorPriceChange24h: number;
-  volume24h: number;
-  uniqueAddresses: number;
-  uniqueAddressesChange24h: number;
-  links: {
-    homepage?: string;
-    twitter?: string;
-    discord?: string;
-  };
-}
-
 const Index = () => {
   const [mode, setMode] = useState<"crypto" | "nft" | "portfolio">("crypto");
   const [darkMode, setDarkMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [cryptoData, setCryptoData] = useState<CryptoData[]>([]);
+  const [allCryptoData, setAllCryptoData] = useState<CryptoData[]>([]);
   const [nftData, setNftData] = useState<NFTData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [selectedCrypto, setSelectedCrypto] = useState<CryptoData | null>(null);
+  const [pricingModalOpen, setPricingModalOpen] = useState(false);
+  const [displayCount, setDisplayCount] = useState(10);
+  const [sortBy, setSortBy] = useState<"market_cap" | "price_change_percentage_24h" | "current_price" | "name">("market_cap");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [activeFilter, setActiveFilter] = useState<"all" | "top10" | "top50" | "gainers" | "losers">("all");
   const { toast } = useToast();
+  const { isAuthenticated, user } = useAuth();
+
+  // Load alerts from localStorage
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setAlerts([]);
+      return;
+    }
+
+    const savedAlerts = localStorage.getItem(`cryptoflash-alerts-${user.id}`);
+    if (savedAlerts) {
+      try {
+        const parsed = JSON.parse(savedAlerts);
+        setAlerts(parsed);
+      } catch (error) {
+        console.error("Failed to parse alerts data:", error);
+      }
+    } else {
+      setAlerts([]);
+    }
+  }, [isAuthenticated, user]);
+
+  // Save alerts to localStorage
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      localStorage.setItem(`cryptoflash-alerts-${user.id}`, JSON.stringify(alerts));
+    }
+  }, [alerts, isAuthenticated, user]);
 
   useEffect(() => {
     if (darkMode) {
@@ -66,46 +84,27 @@ const Index = () => {
     }
   }, [darkMode]);
 
-  const fetchPriceForPortfolio = async (id: string) => {
-    const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd&include_24hr_change=true`);
-    const data = await response.json();
-    const coinInfo = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${id}`);
-    const coinData = await coinInfo.json();
-    return { price: data[id]?.usd || 0, change24h: data[id]?.usd_24h_change || 0, name: coinData[0]?.name || id, symbol: coinData[0]?.symbol || id };
-  };
+  const fetchPriceForPortfolio = useCallback(async (id: string): Promise<PortfolioPriceData> => {
+    try {
+      return await apiService.fetchPortfolioPrice(id);
+    } catch (error) {
+      console.error("Failed to fetch portfolio price:", error);
+      // Return fallback data
+      return { price: 0, change24h: 0, name: id, symbol: id, image: "" };
+    }
+  }, []);
 
   const fetchCryptoData = useCallback(async (coins: string[]) => {
     setIsLoading(true);
     try {
-      const ids = coins.join(",");
-      const response = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_market_cap=true`
-      );
-      
-      if (!response.ok) throw new Error("Failed to fetch crypto data");
-      
-      const data = await response.json();
-      const coinsInfo = await fetch(
-        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}`
-      );
-      const coinsData = await coinsInfo.json();
-
-      const formattedData: CryptoData[] = coinsData.map((coin: any) => ({
-        id: coin.id,
-        name: coin.name,
-        symbol: coin.symbol,
-        emoji: COIN_EMOJIS[coin.id] || "🪙",
-        price: data[coin.id]?.usd || 0,
-        change24h: data[coin.id]?.usd_24h_change || 0,
-        marketCap: data[coin.id]?.usd_market_cap || 0,
-      }));
-
-      setCryptoData(formattedData);
+      const data = await apiService.fetchCryptoPrices(coins);
+      setCryptoData(data);
       setLastUpdated(new Date());
     } catch (error) {
+      console.error("Failed to fetch crypto data:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch crypto data. Please try again.",
+        description: "Failed to fetch crypto data after retries. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -116,43 +115,35 @@ const Index = () => {
   const fetchNFTData = useCallback(async (nftId: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://api.coingecko.com/api/v3/nfts/${nftId}`
-      );
-      
-      if (!response.ok) {
-        throw new Error("NFT not found");
-      }
-      
-      const data = await response.json();
-
-      const formattedData: NFTData = {
-        id: data.id,
-        name: data.name,
-        symbol: data.symbol || "",
-        image: data.image?.small || "",
-        description: data.description || "",
-        floorPrice: data.floor_price?.usd || 0,
-        floorPriceChange24h: data.floor_price_in_usd_24h_percentage_change || 0,
-        volume24h: data.volume_24h?.usd || 0,
-        uniqueAddresses: data.number_of_unique_addresses || 0,
-        uniqueAddressesChange24h: data.number_of_unique_addresses_24h_percentage_change || 0,
-        links: {
-          homepage: data.links?.homepage || "",
-          twitter: data.links?.twitter || "",
-          discord: data.links?.discord || "",
-        },
-      };
-
-      setNftData(formattedData);
+      const data = await apiService.fetchNFTData(nftId);
+      setNftData(data);
       setLastUpdated(new Date());
     } catch (error) {
+      console.error("Failed to fetch NFT data:", error);
       toast({
         title: "NFT not found",
-        description: "Oops, couldn't find that NFT! Try 'bored-ape-yacht-club' 🖼️",
+        description: "Oops, couldn't find that NFT after retries! Try 'bored-ape-yacht-club' 🖼️",
         variant: "destructive",
       });
       setNftData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+  const fetchTopCryptos = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await apiService.fetchTopCryptos(50);
+      setAllCryptoData(data);
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error("Failed to fetch top cryptos:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch cryptocurrency data. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -177,12 +168,12 @@ const Index = () => {
       if (coinParam) {
         fetchCryptoData([coinParam]);
       } else {
-        fetchCryptoData(DEFAULT_COINS);
+        fetchTopCryptos(); // Load top 50 cryptos
       }
     } else {
-      fetchCryptoData(DEFAULT_COINS);
+      fetchTopCryptos(); // Load top 50 cryptos
     }
-  }, [fetchCryptoData, fetchNFTData]);
+  }, [fetchCryptoData, fetchNFTData, fetchTopCryptos]);
 
   useEffect(() => {
     if (mode === "crypto" && cryptoData.length > 0) {
@@ -218,7 +209,7 @@ const Index = () => {
   const handleShare = () => {
     const baseUrl = window.location.origin;
     let shareUrl = baseUrl;
-    
+
     if (mode === "crypto" && cryptoData.length === 1) {
       shareUrl += `?coin=${cryptoData[0].id}`;
     } else if (mode === "nft" && nftData) {
@@ -231,6 +222,151 @@ const Index = () => {
       description: "Share this link to show live prices",
     });
   };
+
+  const handleSetAlert = (crypto: CryptoData) => {
+    setSelectedCrypto(crypto);
+    setAlertModalOpen(true);
+  };
+
+  const handleSaveAlert = (alert: PriceAlert) => {
+    setAlerts(prev => [...prev, alert]);
+    toast({
+      title: "Alert created!",
+      description: `You'll be notified when ${alert.coinName} ${alert.alertType === "above" ? "goes above" : "drops below"} $${alert.targetPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    });
+  };
+
+  const handleDeleteAlert = (alertId: string) => {
+    setAlerts(prev => prev.filter(alert => alert.id !== alertId));
+    toast({
+      title: "Alert deleted",
+      description: "Price alert has been removed",
+    });
+  };
+
+  // Sorting and filtering logic
+  const getFilteredAndSortedData = useCallback(() => {
+    let data = [...allCryptoData];
+
+    // Apply filters
+    switch (activeFilter) {
+      case "top10":
+        data = data.slice(0, 10);
+        break;
+      case "top50":
+        data = data.slice(0, 50);
+        break;
+      case "gainers":
+        data = data.filter(coin => coin.change24h > 0).sort((a, b) => b.change24h - a.change24h);
+        break;
+      case "losers":
+        data = data.filter(coin => coin.change24h < 0).sort((a, b) => a.change24h - b.change24h);
+        break;
+      default:
+        // all - no filter
+        break;
+    }
+
+    // Apply sorting
+    data.sort((a, b) => {
+      let aValue: any, bValue: any;
+
+      switch (sortBy) {
+        case "market_cap":
+          aValue = a.marketCap;
+          bValue = b.marketCap;
+          break;
+        case "price_change_percentage_24h":
+          aValue = a.change24h;
+          bValue = b.change24h;
+          break;
+        case "current_price":
+          aValue = a.price;
+          bValue = b.price;
+          break;
+        case "name":
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+
+      if (sortOrder === "asc") {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+
+    return data.slice(0, displayCount);
+  }, [allCryptoData, activeFilter, sortBy, sortOrder, displayCount]);
+
+  const handleLoadMore = () => {
+    setDisplayCount(prev => Math.min(prev + 10, 50));
+  };
+
+  const handleFilterChange = (filter: "all" | "top10" | "top50" | "gainers" | "losers") => {
+    setActiveFilter(filter);
+    setDisplayCount(10); // Reset pagination when changing filters
+  };
+
+  const handleSortChange = (newSortBy: typeof sortBy) => {
+    if (sortBy === newSortBy) {
+      setSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(newSortBy);
+      setSortOrder("desc");
+    }
+  };
+
+  // Check alerts and send emails
+  useEffect(() => {
+    if (cryptoData.length === 0 || alerts.length === 0) return;
+
+    const activeAlerts = alerts.filter(alert => alert.isActive);
+    if (activeAlerts.length === 0) return;
+
+    activeAlerts.forEach(async (alert) => {
+      const crypto = cryptoData.find(c => c.id === alert.coinId);
+      if (!crypto) return;
+
+      const shouldTrigger =
+        (alert.alertType === "above" && crypto.price >= alert.targetPrice) ||
+        (alert.alertType === "below" && crypto.price <= alert.targetPrice);
+
+      if (shouldTrigger) {
+        try {
+          // Send email using EmailJS
+          await emailjs.send(
+            'YOUR_SERVICE_ID', // Replace with your EmailJS service ID
+            'YOUR_TEMPLATE_ID', // Replace with your EmailJS template ID
+            {
+              to_email: alert.email,
+              coin_name: alert.coinName,
+              alert_type: alert.alertType,
+              target_price: alert.targetPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+              current_price: crypto.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+              coin_symbol: alert.coinSymbol.toUpperCase(),
+            },
+            'YOUR_PUBLIC_KEY' // Replace with your EmailJS public key
+          );
+
+          // Deactivate alert after sending
+          setAlerts(prev => prev.map(a =>
+            a.id === alert.id ? { ...a, isActive: false } : a
+          ));
+
+          toast({
+            title: "Alert triggered!",
+            description: `${alert.coinName} ${alert.alertType === "above" ? "went above" : "dropped below"} your target price`,
+          });
+        } catch (error) {
+          console.error("Failed to send alert email:", error);
+        }
+      }
+    });
+  }, [cryptoData, alerts, toast]);
 
   // Generate JSON-LD schema
   const generateSchema = () => {
@@ -288,8 +424,7 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="grid md:grid-cols-[1fr_300px] gap-8">
-          <div>
+        <div className="w-full">
             {/* Hero Section */}
             <div className="text-center mb-8 space-y-4">
               <h1 className="text-4xl md:text-5xl font-bold mb-2">
@@ -348,13 +483,92 @@ const Index = () => {
             {/* Data Display */}
             <div className="mb-8">
               {mode === "crypto" ? (
-                <CryptoTickerTable data={cryptoData} isLoading={isLoading} />
+                <>
+                  {/* Filter and Sort Controls */}
+                  {!searchQuery && (
+                    <div className="mb-6 space-y-4">
+                      {/* Filter Chips */}
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {[
+                          { key: "all", label: "All Coins", count: allCryptoData.length },
+                          { key: "top10", label: "Top 10", count: 10 },
+                          { key: "top50", label: "Top 50", count: 50 },
+                          { key: "gainers", label: "Biggest Gainers", count: allCryptoData.filter(c => c.change24h > 0).length },
+                          { key: "losers", label: "Biggest Losers", count: allCryptoData.filter(c => c.change24h < 0).length },
+                        ].map(({ key, label, count }) => (
+                          <button
+                            key={key}
+                            onClick={() => handleFilterChange(key as any)}
+                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                              activeFilter === key
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                            }`}
+                          >
+                            {label} ({count})
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Sort Options */}
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {[
+                          { key: "market_cap", label: "Market Cap" },
+                          { key: "price_change_percentage_24h", label: "24h Change" },
+                          { key: "current_price", label: "Price" },
+                          { key: "name", label: "Name" },
+                        ].map(({ key, label }) => (
+                          <button
+                            key={key}
+                            onClick={() => handleSortChange(key as any)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+                              sortBy === key
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                            }`}
+                          >
+                            {label}
+                            {sortBy === key && (
+                              <span>{sortOrder === "desc" ? "↓" : "↑"}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <CryptoTickerTable
+                    data={searchQuery ? cryptoData : getFilteredAndSortedData()}
+                    isLoading={isLoading}
+                    alerts={alerts}
+                    onSetAlert={handleSetAlert}
+                  />
+
+                  {/* Load More Button */}
+                  {!searchQuery && displayCount < getFilteredAndSortedData().length && (
+                    <div className="text-center mt-6">
+                      <button
+                        onClick={handleLoadMore}
+                        className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity"
+                      >
+                        Load More ({displayCount} of {getFilteredAndSortedData().length})
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : mode === "nft" ? (
                 <NFTTable data={nftData} isLoading={isLoading} />
               ) : (
                 <PortfolioTable onFetchPrice={fetchPriceForPortfolio} />
               )}
             </div>
+
+            {/* My Alerts Section */}
+            {mode === "crypto" && alerts.length > 0 && (
+              <div className="mb-8">
+                <AlertsTable alerts={alerts} onDeleteAlert={handleDeleteAlert} />
+              </div>
+            )}
 
             {/* Last Updated */}
             <div className="text-center text-sm text-muted-foreground mb-8">
@@ -377,25 +591,24 @@ const Index = () => {
                 </Link>
               </div>
             )}
-          </div>
-
-          {/* Sidebar AdSense */}
-          <aside className="hidden md:block">
-            <div className="sticky top-24">
-              <ins
-                className="adsbygoogle"
-                style={{ display: "block" }}
-                data-ad-client="ca-pub-YOUR_ID"
-                data-ad-slot="YOUR_SLOT"
-                data-ad-format="auto"
-                data-full-width-responsive="true"
-              />
-            </div>
-          </aside>
         </div>
       </main>
 
       <Footer />
+
+      {/* Alert Modal */}
+      <AlertModal
+        isOpen={alertModalOpen}
+        onClose={() => setAlertModalOpen(false)}
+        crypto={selectedCrypto}
+        onSaveAlert={handleSaveAlert}
+      />
+
+      {/* Pricing Modal */}
+      <PricingModal
+        isOpen={pricingModalOpen}
+        onClose={() => setPricingModalOpen(false)}
+      />
     </div>
   );
 };
