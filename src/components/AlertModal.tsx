@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProStatus } from "@/hooks/useProStatus";
 import { useToast } from "@/hooks/use-toast";
 
 interface CryptoData {
@@ -22,6 +23,7 @@ interface AlertModalProps {
   onClose: () => void;
   crypto: CryptoData | null;
   onSaveAlert: (alert: PriceAlert) => void;
+  currentAlertsCount: number;
 }
 
 export interface PriceAlert {
@@ -36,20 +38,21 @@ export interface PriceAlert {
   isActive: boolean;
 }
 
-export const AlertModal = ({ isOpen, onClose, crypto, onSaveAlert }: AlertModalProps) => {
+export const AlertModal = ({ isOpen, onClose, crypto, onSaveAlert, currentAlertsCount }: AlertModalProps) => {
   const [targetPrice, setTargetPrice] = useState("");
   const [alertType, setAlertType] = useState<"above" | "below">("above");
   const [email, setEmail] = useState("");
-  const { canAddAlert } = useAuth();
+  const { isPro } = useProStatus();
   const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!canAddAlert()) {
+    // Limit to 2 alerts for non-Pro users
+    if (!isPro && currentAlertsCount >= 2) {
       toast({
         title: "Upgrade Required",
-        description: "You've reached the free plan limit. Upgrade to Pro for unlimited alerts!",
+        description: "You've reached the free plan limit of 2 alerts. Upgrade to Pro for unlimited alerts!",
         variant: "destructive",
       });
       onClose();

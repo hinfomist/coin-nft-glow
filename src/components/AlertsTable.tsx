@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { PriceAlert } from "./AlertModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProStatus } from "@/hooks/useProStatus";
 
 interface AlertsTableProps {
   alerts: PriceAlert[];

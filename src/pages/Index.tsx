@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { CryptoTickerTable } from "@/components/CryptoTickerTable";
 import { NFTTable } from "@/components/NFTTable";
 import { PortfolioTable } from "@/components/PortfolioTable";
-import { AlertModal, PriceAlert } from "@/components/AlertModal";
+import { AlertModal, type PriceAlert } from "@/components/AlertModal";
 import { AlertsTable } from "@/components/AlertsTable";
 import { UserProfile } from "@/components/UserProfile";
 import { PricingModal } from "@/components/PricingModal";
@@ -42,12 +42,12 @@ const Index = () => {
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [selectedCrypto, setSelectedCrypto] = useState<CryptoData | null>(null);
   const [pricingModalOpen, setPricingModalOpen] = useState(false);
-  const [displayCount, setDisplayCount] = useState(10);
+  const [displayCount, setDisplayCount] = useState(50); // ✅ CHANGED: Now starts at 50 instead of 10
   const [sortBy, setSortBy] = useState<"market_cap" | "price_change_percentage_24h" | "current_price" | "name">("market_cap");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [activeFilter, setActiveFilter] = useState<"all" | "top10" | "top50" | "gainers" | "losers">("all");
   const { toast } = useToast();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isPro } = useAuth(); // ✅ ADDED: isPro
 
   // Load alerts from localStorage
   useEffect(() => {
@@ -89,7 +89,6 @@ const Index = () => {
       return await apiService.fetchPortfolioPrice(id);
     } catch (error) {
       console.error("Failed to fetch portfolio price:", error);
-      // Return fallback data
       return { price: 0, change24h: 0, name: id, symbol: id, image: "" };
     }
   }, []);
@@ -168,10 +167,10 @@ const Index = () => {
       if (coinParam) {
         fetchCryptoData([coinParam]);
       } else {
-        fetchTopCryptos(); // Load top 50 cryptos
+        fetchTopCryptos();
       }
     } else {
-      fetchTopCryptos(); // Load top 50 cryptos
+      fetchTopCryptos();
     }
   }, [fetchCryptoData, fetchNFTData, fetchTopCryptos]);
 
@@ -223,7 +222,19 @@ const Index = () => {
     });
   };
 
+  // ✅ UPDATED: Check if user is Pro before allowing alert creation
   const handleSetAlert = (crypto: CryptoData) => {
+    if (!isPro) {
+      // Show upgrade prompt for free users
+      setPricingModalOpen(true);
+      toast({
+        title: "Pro Feature",
+        description: "Price alerts are available for Pro users. Upgrade to unlock!",
+        variant: "default",
+      });
+      return;
+    }
+
     setSelectedCrypto(crypto);
     setAlertModalOpen(true);
   };
@@ -308,7 +319,7 @@ const Index = () => {
 
   const handleFilterChange = (filter: "all" | "top10" | "top50" | "gainers" | "losers") => {
     setActiveFilter(filter);
-    setDisplayCount(10); // Reset pagination when changing filters
+    setDisplayCount(50); // ✅ CHANGED: Reset to 50 instead of 10
   };
 
   const handleSortChange = (newSortBy: typeof sortBy) => {
@@ -339,8 +350,8 @@ const Index = () => {
         try {
           // Send email using EmailJS
           await emailjs.send(
-            'YOUR_SERVICE_ID', // Replace with your EmailJS service ID
-            'YOUR_TEMPLATE_ID', // Replace with your EmailJS template ID
+            'YOUR_SERVICE_ID',
+            'YOUR_TEMPLATE_ID',
             {
               to_email: alert.email,
               coin_name: alert.coinName,
@@ -349,7 +360,7 @@ const Index = () => {
               current_price: crypto.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
               coin_symbol: alert.coinSymbol.toUpperCase(),
             },
-            'YOUR_PUBLIC_KEY' // Replace with your EmailJS public key
+            'YOUR_PUBLIC_KEY'
           );
 
           // Deactivate alert after sending
@@ -405,7 +416,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
-      {/* JSON-LD Schema */}
       {generateSchema() && (
         <script
           type="application/ld+json"
@@ -413,7 +423,6 @@ const Index = () => {
         />
       )}
 
-      {/* AdSense Script */}
       <script
         async
         src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_ID"
@@ -422,189 +431,166 @@ const Index = () => {
 
       <Navbar darkMode={darkMode} onToggleDarkMode={() => setDarkMode(!darkMode)} onShare={handleShare} />
 
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8 max-w-5xl">
         <div className="w-full">
-            {/* Hero Section */}
-            <div className="text-center mb-8 space-y-4">
-              <h1 className="text-4xl md:text-5xl font-bold mb-2">
-                {mode === "portfolio" ? "Your Portfolio" : `Live ${mode === "crypto" ? "Crypto" : "NFT"} Prices`}
-              </h1>
-              <p className="text-muted-foreground text-lg">
-                {mode === "portfolio" 
-                  ? "Track your investments in real-time" 
-                  : "Real-time tracking. No ads. No sign-ups. Just data."}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Built with ❤️ by{" "}
-                <a
-                  href="https://x.com/hamzaaslam"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Hamza Aslam
-                </a>
-              </p>
-            </div>
+          <div className="text-center mb-8 space-y-4">
+            <h1 className="text-4xl md:text-5xl font-bold mb-2">
+              {mode === "portfolio" ? "Your Portfolio" : `Live ${mode === "crypto" ? "Crypto" : "NFT"} Prices`}
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              {mode === "portfolio"
+                ? "Track your investments in real-time"
+                : "Real-time tracking. No ads. No sign-ups. Just data."}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Built with ❤️ by{" "}
+              <a
+                href="https://x.com/hamzaaslam"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                Hamza Aslam
+              </a>
+            </p>
+          </div>
 
-            {/* Mode Toggle */}
-            <div className="flex justify-center mb-6">
-              <Tabs value={mode} onValueChange={(v) => setMode(v as "crypto" | "nft" | "portfolio")}>
-                <TabsList className="grid w-[420px] grid-cols-3">
-                  <TabsTrigger value="crypto">💰 Crypto</TabsTrigger>
-                  <TabsTrigger value="nft">🖼️ NFTs</TabsTrigger>
-                  <TabsTrigger value="portfolio">📊 Portfolio</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
+          <div className="flex justify-center mb-6">
+            <Tabs value={mode} onValueChange={(v) => setMode(v as "crypto" | "nft" | "portfolio")}>
+              <TabsList className="grid w-[420px] grid-cols-3">
+                <TabsTrigger value="crypto">💰 Crypto</TabsTrigger>
+                <TabsTrigger value="nft">🖼️ NFTs</TabsTrigger>
+                <TabsTrigger value="portfolio">📊 Portfolio</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
 
-            {/* Search Bar */}
-            {mode !== "portfolio" && (
-              <div className="relative mb-8 max-w-2xl mx-auto">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-                <Input
-                  type="text"
-                  placeholder={
-                    mode === "crypto"
-                      ? "Search any crypto (e.g., BTC, ETH, SOL)..."
-                      : "Search NFT collection (e.g., bored-ape-yacht-club)..."
-                  }
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-12 h-14 text-lg rounded-xl"
-                />
-                {isLoading && (
-                  <Loader2 className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-primary" />
-                )}
-              </div>
-            )}
-
-            {/* Data Display */}
-            <div className="mb-8">
-              {mode === "crypto" ? (
-                <>
-                  {/* Filter and Sort Controls */}
-                  {!searchQuery && (
-                    <div className="mb-6 space-y-4">
-                      {/* Filter Chips */}
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {[
-                          { key: "all", label: "All Coins", count: allCryptoData.length },
-                          { key: "top10", label: "Top 10", count: 10 },
-                          { key: "top50", label: "Top 50", count: 50 },
-                          { key: "gainers", label: "Biggest Gainers", count: allCryptoData.filter(c => c.change24h > 0).length },
-                          { key: "losers", label: "Biggest Losers", count: allCryptoData.filter(c => c.change24h < 0).length },
-                        ].map(({ key, label, count }) => (
-                          <button
-                            key={key}
-                            onClick={() => handleFilterChange(key as any)}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                              activeFilter === key
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                            }`}
-                          >
-                            {label} ({count})
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Sort Options */}
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {[
-                          { key: "market_cap", label: "Market Cap" },
-                          { key: "price_change_percentage_24h", label: "24h Change" },
-                          { key: "current_price", label: "Price" },
-                          { key: "name", label: "Name" },
-                        ].map(({ key, label }) => (
-                          <button
-                            key={key}
-                            onClick={() => handleSortChange(key as any)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
-                              sortBy === key
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                            }`}
-                          >
-                            {label}
-                            {sortBy === key && (
-                              <span>{sortOrder === "desc" ? "↓" : "↑"}</span>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <CryptoTickerTable
-                    data={searchQuery ? cryptoData : getFilteredAndSortedData()}
-                    isLoading={isLoading}
-                    alerts={alerts}
-                    onSetAlert={handleSetAlert}
-                  />
-
-                  {/* Load More Button */}
-                  {!searchQuery && displayCount < getFilteredAndSortedData().length && (
-                    <div className="text-center mt-6">
-                      <button
-                        onClick={handleLoadMore}
-                        className="px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity"
-                      >
-                        Load More ({displayCount} of {getFilteredAndSortedData().length})
-                      </button>
-                    </div>
-                  )}
-                </>
-              ) : mode === "nft" ? (
-                <NFTTable data={nftData} isLoading={isLoading} />
-              ) : (
-                <PortfolioTable onFetchPrice={fetchPriceForPortfolio} />
+          {mode !== "portfolio" && (
+            <div className="relative mb-8 max-w-2xl mx-auto">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+              <Input
+                type="text"
+                placeholder={
+                  mode === "crypto"
+                    ? "Search any crypto (e.g., BTC, ETH, SOL)..."
+                    : "Search NFT collection (e.g., bored-ape-yacht-club)..."
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-12 h-14 text-lg rounded-xl"
+              />
+              {isLoading && (
+                <Loader2 className="absolute right-4 top-1/2 transform -translate-y-1/2 w-5 h-5 animate-spin text-primary" />
               )}
             </div>
+          )}
 
-            {/* My Alerts Section */}
-            {mode === "crypto" && alerts.length > 0 && (
-              <div className="mb-8">
-                <AlertsTable alerts={alerts} onDeleteAlert={handleDeleteAlert} />
-              </div>
+          <div className="mb-8">
+            {mode === "crypto" ? (
+              <>
+                {!searchQuery && (
+                  <div className="mb-6 space-y-4">
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {[
+                        { key: "all", label: "All Coins", count: allCryptoData.length },
+                        { key: "top10", label: "Top 10", count: 10 },
+                        { key: "top50", label: "Top 50", count: 50 },
+                        { key: "gainers", label: "Biggest Gainers", count: allCryptoData.filter(c => c.change24h > 0).length },
+                        { key: "losers", label: "Biggest Losers", count: allCryptoData.filter(c => c.change24h < 0).length },
+                      ].map(({ key, label, count }) => (
+                        <button
+                          key={key}
+                          onClick={() => handleFilterChange(key as any)}
+                          className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeFilter === key
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                            }`}
+                        >
+                          {label} ({count})
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {[
+                        { key: "market_cap", label: "Market Cap" },
+                        { key: "price_change_percentage_24h", label: "24h Change" },
+                        { key: "current_price", label: "Price" },
+                        { key: "name", label: "Name" },
+                      ].map(({ key, label }) => (
+                        <button
+                          key={key}
+                          onClick={() => handleSortChange(key as any)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${sortBy === key
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                            }`}
+                        >
+                          {label}
+                          {sortBy === key && (
+                            <span>{sortOrder === "desc" ? "↓" : "↑"}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <CryptoTickerTable
+                  data={searchQuery ? cryptoData : getFilteredAndSortedData()}
+                  isLoading={isLoading}
+                  alerts={alerts}
+                  onSetAlert={handleSetAlert}
+                />
+
+                {/* ✅ REMOVED Load More Button - Now shows all 50 by default */}
+              </>
+            ) : mode === "nft" ? (
+              <NFTTable data={nftData} isLoading={isLoading} />
+            ) : (
+              <PortfolioTable onFetchPrice={fetchPriceForPortfolio} />
             )}
+          </div>
 
-            {/* Last Updated */}
-            <div className="text-center text-sm text-muted-foreground mb-8">
-              Last updated: {lastUpdated.toLocaleTimeString()}
+          {/* ✅ UPDATED: Only show alerts for Pro users */}
+          {mode === "crypto" && isPro && alerts.length > 0 && (
+            <div className="mb-8">
+              <AlertsTable alerts={alerts} onDeleteAlert={handleDeleteAlert} />
             </div>
+          )}
 
-            {/* CTA to Portfolio */}
-            {mode !== "portfolio" && (
-              <div className="mt-8 p-6 border border-border rounded-xl bg-card text-center">
-                <h3 className="text-xl font-bold mb-2">Track Your Portfolio</h3>
-                <p className="text-muted-foreground mb-4">
-                  Add your holdings and see real-time P&L with visual charts
-                </p>
-                <Link
-                  to="/?tab=portfolio"
-                  onClick={() => setMode("portfolio")}
-                  className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity"
-                >
-                  Start Tracking →
-                </Link>
-              </div>
-            )}
+          <div className="text-center text-sm text-muted-foreground mb-8">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </div>
+
+          {mode !== "portfolio" && (
+            <div className="mt-8 p-6 border border-border rounded-xl bg-card text-center">
+              <h3 className="text-xl font-bold mb-2">Track Your Portfolio</h3>
+              <p className="text-muted-foreground mb-4">
+                Add your holdings and see real-time P&L with visual charts
+              </p>
+              <Link
+                to="/?tab=portfolio"
+                onClick={() => setMode("portfolio")}
+                className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 transition-opacity"
+              >
+                Start Tracking →
+              </Link>
+            </div>
+          )}
         </div>
       </main>
 
       <Footer />
 
-      {/* Alert Modal */}
       <AlertModal
         isOpen={alertModalOpen}
         onClose={() => setAlertModalOpen(false)}
         crypto={selectedCrypto}
         onSaveAlert={handleSaveAlert}
+        currentAlertsCount={alerts.length}
       />
 
-      {/* Pricing Modal */}
       <PricingModal
         isOpen={pricingModalOpen}
         onClose={() => setPricingModalOpen(false)}

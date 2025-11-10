@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, Share2, Menu, X, User, LogOut } from "lucide-react";
+import { Moon, Sun, Share2, Menu, X, User, LogOut, CreditCard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProStatus } from "@/hooks/useProStatus";
 import { AuthModal } from "./AuthModal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 interface NavbarProps {
   darkMode: boolean;
@@ -18,6 +20,7 @@ export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const { user, logout, isAuthenticated } = useAuth();
+  const { isPro, remainingDays } = useProStatus();
 
   const navLinks = [
     { path: "/", label: "Home" },
@@ -31,13 +34,18 @@ export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => 
     setIsMobileMenuOpen(false);
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+  // ✅ FIXED: Handle undefined name
+  const getInitials = (name: string | undefined) => {
+    if (!name || !name.trim()) {
+      return 'U'; // Default to 'U' for User
+    }
+
+    const parts = name.trim().split(' ').filter(Boolean);
+    if (parts.length === 0) return 'U';
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+
+    // First letter of first name + first letter of last name
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
   return (
@@ -56,9 +64,8 @@ export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => 
               <Link
                 key={link.path}
                 to={link.path}
-                className={`text-sm font-medium transition-colors hover:text-primary ${
-                  location.pathname === link.path ? "text-primary" : "text-muted-foreground"
-                }`}
+                className={`text-sm font-medium transition-colors hover:text-primary ${location.pathname === link.path ? "text-primary" : "text-muted-foreground"
+                  }`}
               >
                 {link.label}
               </Link>
@@ -91,14 +98,15 @@ export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => 
                   <Button variant="ghost" className="rounded-full p-1">
                     <Avatar className="w-8 h-8">
                       <AvatarFallback className="text-sm">
-                        {user ? getInitials(user.name) : "U"}
+                        {getInitials(user?.name)}
                       </AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <div className="px-2 py-1.5 text-sm font-medium">
-                    {user?.name}
+                <DropdownMenuContent align="end" className="w-56">
+                  <div className="px-2 py-1.5 text-sm font-medium flex items-center justify-between">
+                    <span>{user?.name || user?.email || 'User'}</span>
+                    {isPro && <Badge variant="premium">Pro</Badge>}
                   </div>
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
                     {user?.email}
@@ -109,6 +117,15 @@ export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => 
                       My Portfolio
                     </Link>
                   </DropdownMenuItem>
+                  {isPro && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/subscription" className="cursor-pointer">
+                        <CreditCard className="w-4 h-4 mr-2" />
+                        Subscription
+                        <span className="ml-auto text-xs text-muted-foreground">{remainingDays} days left</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={logout} className="cursor-pointer">
                     <LogOut className="w-4 h-4 mr-2" />
                     Logout
@@ -148,9 +165,8 @@ export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => 
                     key={link.path}
                     to={link.path}
                     onClick={handleMobileLinkClick}
-                    className={`text-lg font-medium py-2 px-4 rounded-lg transition-colors hover:bg-accent ${
-                      location.pathname === link.path ? "text-primary bg-accent" : "text-foreground"
-                    }`}
+                    className={`text-lg font-medium py-2 px-4 rounded-lg transition-colors hover:bg-accent ${location.pathname === link.path ? "text-primary bg-accent" : "text-foreground"
+                      }`}
                   >
                     {link.label}
                   </Link>

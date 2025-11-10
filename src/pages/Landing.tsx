@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { PricingModal } from "@/components/PricingModal";
+import { useAuth } from "@/contexts/AuthContext"; // ✅ ADD THIS
 
 const Landing = () => {
   const [pricingModalOpen, setPricingModalOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
   const navigate = useNavigate();
+  const { isPro, loading } = useAuth(); // ✅ ADD THIS
 
   const handleShare = () => {
     const shareUrl = window.location.origin;
@@ -25,6 +27,17 @@ const Landing = () => {
       document.documentElement.classList.remove("dark");
     }
   }, [darkMode]);
+
+  // ✅ ADD THIS FUNCTION - Handle Pro Features Button Click
+  const handleProFeaturesClick = () => {
+    if (isPro) {
+      // If user is Pro, go directly to portfolio
+      navigate('/app?tab=portfolio');
+    } else {
+      // If user is Free, show pricing modal
+      setPricingModalOpen(true);
+    }
+  };
 
   const features = [
     {
@@ -156,9 +169,16 @@ const Landing = () => {
                   Start Tracking Free
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
-                <Button size="lg" variant="outline" className="text-lg px-8" onClick={() => setPricingModalOpen(true)}>
+                {/* ✅ FIXED BUTTON - Now checks Pro status */}
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="text-lg px-8"
+                  onClick={handleProFeaturesClick}
+                  disabled={loading}
+                >
                   <Zap className="w-5 h-5 mr-2" />
-                  View Pro Features
+                  {isPro ? 'Go to Portfolio' : 'View Pro Features'}
                 </Button>
               </div>
 
@@ -310,9 +330,16 @@ const Landing = () => {
               Get Started Free
               <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
-            <Button size="lg" variant="outline" className="text-lg px-8 border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary" onClick={() => setPricingModalOpen(true)}>
+            {/* ✅ FIXED BUTTON - Bottom CTA also checks Pro status */}
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-lg px-8 border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary"
+              onClick={handleProFeaturesClick}
+              disabled={loading}
+            >
               <DollarSign className="w-5 h-5 mr-2" />
-              Upgrade to Pro
+              {isPro ? 'Go to Portfolio' : 'Upgrade to Pro'}
             </Button>
           </div>
           <p className="text-sm mt-4 opacity-75">

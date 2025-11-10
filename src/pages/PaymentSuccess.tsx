@@ -1,185 +1,220 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckCircle, ArrowRight, Crown } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { CheckCircle, Clock, ArrowRight, MessageCircle, Download, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
+import { Badge } from "@/components/ui/badge";
 
 const PaymentSuccess = () => {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, upgradeToPro } = useAuth();
-  const { toast } = useToast();
-  const [isProcessing, setIsProcessing] = useState(true);
+  const [checkoutData, setCheckoutData] = useState<any>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
 
   useEffect(() => {
-    const verifyPayment = async () => {
-      try {
-        // Get payment details from URL parameters (PayPal returns these)
-        const paymentId = searchParams.get('tx'); // PayPal transaction ID
-        const paymentStatus = searchParams.get('st'); // Payment status
+    // Get order data from localStorage
+    const data = localStorage.getItem('checkout_data');
+    if (data) {
+      setCheckoutData(JSON.parse(data));
+    }
 
-        // Get pending payment from localStorage
-        const pendingPayment = localStorage.getItem('pending_payment');
-        if (!pendingPayment) {
-          throw new Error('No pending payment found');
-        }
+    // Show confetti animation
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 3000);
+  }, []);
 
-        const paymentData = JSON.parse(pendingPayment);
+  const handleReturnToDashboard = () => {
+    navigate('/app');
+  };
 
-        // Verify payment (in production, you'd verify with PayPal IPN/webhook)
-        if (paymentStatus === 'Completed' || paymentId) {
-          // Payment successful - upgrade user to Pro
-          upgradeToPro();
+  const handleContactSupport = () => {
+    window.open('https://wa.me/923144460158', '_blank');
+  };
 
-          // Clear pending payment
-          localStorage.removeItem('pending_payment');
-
-          // Store subscription info
-          const subscriptionData = {
-            userId: user?.id,
-            subscriptionId: paymentId || `sub_${Date.now()}`,
-            status: 'active',
-            plan: 'pro',
-            amount: 9.99,
-            currency: 'USD',
-            startDate: new Date().toISOString(),
-            nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
-            paymentMethod: 'paypal'
-          };
-
-          localStorage.setItem(`cryptoflash_subscription_${user?.id}`, JSON.stringify(subscriptionData));
-
-          toast({
-            title: "Welcome to Pro! 🎉",
-            description: "Your subscription has been activated successfully.",
-          });
-
-          setIsProcessing(false);
-        } else {
-          throw new Error('Payment verification failed');
-        }
-      } catch (error) {
-        console.error('Payment verification error:', error);
-        toast({
-          title: "Payment Verification Failed",
-          description: "There was an issue verifying your payment. Please contact support.",
-          variant: "destructive",
-        });
-        navigate('/app');
-      }
+  const handleDownloadReceipt = () => {
+    // Simple receipt download
+    const receiptData = {
+      orderId: checkoutData?.orderId,
+      customer: checkoutData?.fullName,
+      email: checkoutData?.email,
+      plan: 'Pro Monthly',
+      amount: `$${checkoutData?.amount}`,
+      date: new Date().toLocaleDateString(),
+      status: 'Payment Submitted - Pending Verification'
     };
 
-    // Small delay to show processing state
-    setTimeout(verifyPayment, 1000);
-  }, [searchParams, user, upgradeToPro, toast, navigate]);
+    const receiptText = `
+CryptoFlash Pro Subscription Receipt
 
-  if (isProcessing) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar darkMode={true} onToggleDarkMode={() => {}} onShare={() => {}} />
-        <div className="container mx-auto px-4 py-20">
-          <div className="max-w-md mx-auto text-center">
-            <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-            <h1 className="text-2xl font-bold mb-2">Verifying Payment...</h1>
-            <p className="text-muted-foreground">Please wait while we confirm your subscription.</p>
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+Order ID: ${receiptData.orderId}
+Customer: ${receiptData.customer}
+Email: ${receiptData.email}
+Plan: ${receiptData.plan}
+Amount: ${receiptData.amount}
+Date: ${receiptData.date}
+Status: ${receiptData.status}
+
+Thank you for your subscription!
+Your Pro features will be activated within 24 hours after payment verification.
+    `.trim();
+
+    const blob = new Blob([receiptText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CryptoFlash_Receipt_${receiptData.orderId}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar darkMode={true} onToggleDarkMode={() => {}} onShare={() => {}} />
+      {/* Confetti Animation */}
+      {showConfetti && (
+        <div className="fixed inset-0 pointer-events-none z-50">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-6xl animate-bounce">🎉</div>
+          </div>
+        </div>
+      )}
 
       <div className="container mx-auto px-4 py-20">
-        <div className="max-w-2xl mx-auto">
-          <Card className="p-8 text-center">
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+        <div className="max-w-4xl mx-auto">
+          {/* Hero Section */}
+          <div className="text-center mb-12">
+            <div className="w-20 h-20 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+              <CheckCircle className="w-10 h-10 text-green-600" />
             </div>
-
-            <h1 className="text-3xl font-bold mb-4">Payment Successful! 🎉</h1>
-
-            <div className="bg-primary/10 rounded-lg p-6 mb-6">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Crown className="w-5 h-5 text-primary" />
-                <span className="text-lg font-semibold">CryptoFlash Pro Activated</span>
-              </div>
-              <p className="text-muted-foreground">
-                Welcome to the Pro experience! Your subscription is now active.
-              </p>
+            <h1 className="text-4xl font-bold mb-4">Payment Submitted Successfully!</h1>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="text-lg">Order ID:</span>
+              <Badge variant="outline" className="text-lg px-3 py-1 font-mono">
+                {checkoutData?.orderId}
+              </Badge>
             </div>
+          </div>
 
-            <div className="space-y-4 mb-8">
-              <h3 className="text-xl font-semibold">What's Unlocked:</h3>
-              <div className="grid md:grid-cols-2 gap-4 text-left">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm">Unlimited portfolios</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm">Unlimited holdings</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm">Unlimited price alerts</span>
-                  </div>
+          {/* What Happens Next */}
+          <Card className="p-8 mb-8">
+            <h2 className="text-2xl font-semibold mb-6 text-center">What Happens Next?</h2>
+
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm">Ad-free experience</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm">Priority support</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
-                    <span className="text-sm">CSV export</span>
-                  </div>
+                <div>
+                  <h3 className="font-semibold">Step 1: Payment submitted</h3>
+                  <p className="text-sm text-muted-foreground">Completed - Your payment proof has been received</p>
                 </div>
               </div>
-            </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                size="lg"
-                onClick={() => navigate('/app?tab=portfolio')}
-                className="flex items-center gap-2"
-              >
-                Start Using Pro Features
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => navigate('/app')}
-              >
-                Explore Crypto Prices
-              </Button>
-            </div>
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Step 2: Verification in progress</h3>
+                  <p className="text-sm text-muted-foreground">24 hours - We're manually verifying your payment</p>
+                </div>
+              </div>
 
-            <div className="mt-6 p-4 bg-muted rounded-lg">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                  <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                </div>
+                <div>
+                  <h3 className="font-semibold">Step 3: Account activation</h3>
+                  <p className="text-sm text-muted-foreground">You'll receive an email and WhatsApp confirmation</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Information Boxes */}
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <Card className="p-6 text-center">
+              <Mail className="w-8 h-8 mx-auto mb-3 text-blue-600" />
+              <h3 className="font-semibold mb-2">Confirmation Email Sent</h3>
               <p className="text-sm text-muted-foreground">
-                <strong>Next billing date:</strong> {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                <br />
-                You can manage your subscription anytime from your account settings.
+                We've sent order details to {checkoutData?.email}
               </p>
+            </Card>
+
+            <Card className="p-6 text-center">
+              <Clock className="w-8 h-8 mx-auto mb-3 text-orange-600" />
+              <h3 className="font-semibold mb-2">Activation Time</h3>
+              <p className="text-sm text-muted-foreground">
+                Your Pro subscription will be activated within 24 hours
+              </p>
+            </Card>
+
+            <Card className="p-6 text-center">
+              <MessageCircle className="w-8 h-8 mx-auto mb-3 text-green-600" />
+              <h3 className="font-semibold mb-2">WhatsApp Confirmation</h3>
+              <p className="text-sm text-muted-foreground">
+                Check your WhatsApp for order details
+              </p>
+            </Card>
+          </div>
+
+          {/* While You Wait */}
+          <Card className="p-6 mb-8">
+            <h3 className="text-lg font-semibold mb-4">While You Wait:</h3>
+            <div className="grid md:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <p>• Continue using Free features</p>
+                <p>• Explore the crypto market</p>
+              </div>
+              <div className="space-y-2">
+                <p>• Set up your portfolio</p>
+                <p>• Join our community</p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <Button
+              size="lg"
+              onClick={handleReturnToDashboard}
+              className="flex items-center gap-2"
+            >
+              Return to Dashboard
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={handleContactSupport}
+              className="flex items-center gap-2"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Contact Support
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={handleDownloadReceipt}
+              className="flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Download Receipt
+            </Button>
+          </div>
+
+          {/* Support Section */}
+          <Card className="p-6 text-center">
+            <h3 className="text-lg font-semibold mb-4">Need Help?</h3>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>📞 WhatsApp: +92 314 4460158</p>
+              <p>📧 Email: support@cryptoflash.com</p>
+              <p>⏰ Response time: Within 12 hours</p>
             </div>
           </Card>
         </div>
       </div>
-
-      <Footer />
     </div>
   );
 };

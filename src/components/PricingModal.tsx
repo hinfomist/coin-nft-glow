@@ -1,11 +1,8 @@
-import { useState } from "react";
 import { Check, X, Crown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
 
 interface PricingModalProps {
   isOpen: boolean;
@@ -13,48 +10,9 @@ interface PricingModalProps {
 }
 
 export const PricingModal = ({ isOpen, onClose }: PricingModalProps) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const { user, upgradeToPro } = useAuth();
-  const { toast } = useToast();
-
-  const handleUpgrade = async () => {
-    setIsLoading(true);
-
-    try {
-      const paypalEmail = import.meta.env.VITE_PAYPAL_EMAIL || 'your-paypal-email@example.com';
-      const currency = import.meta.env.VITE_PAYPAL_CURRENCY || 'USD';
-      const price = import.meta.env.VITE_PRO_PRICE || '9.99';
-
-      // PayPal integration for Pakistan and global users
-      const paypalUrl = `https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=${encodeURIComponent(paypalEmail)}&item_name=${encodeURIComponent('CryptoFlash Pro Subscription')}&amount=${price}&currency_code=${currency}&return=${encodeURIComponent(window.location.origin + '/payment/success')}&cancel_return=${encodeURIComponent(window.location.origin + '/payment/cancel')}&notify_url=${encodeURIComponent(window.location.origin + '/api/paypal/webhook')}`;
-
-      // Store payment intent in localStorage for verification
-      const paymentId = `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('pending_payment', JSON.stringify({
-        id: paymentId,
-        amount: parseFloat(price),
-        currency: currency,
-        timestamp: Date.now(),
-        userId: user?.id
-      }));
-
-      toast({
-        title: "Redirecting to PayPal...",
-        description: "You'll be redirected to PayPal to complete your secure payment.",
-      });
-
-      // Redirect to PayPal
-      window.location.href = paypalUrl;
-
-    } catch (error) {
-      console.error('Payment error:', error);
-      toast({
-        title: "Payment Error",
-        description: "Failed to initiate payment. Please try again.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-    }
+  const handleUpgrade = () => {
+    onClose();
+    window.location.href = '/checkout';
   };
 
   const features = {
@@ -162,9 +120,8 @@ export const PricingModal = ({ isOpen, onClose }: PricingModalProps) => {
             <Button
               className="w-full"
               onClick={handleUpgrade}
-              disabled={isLoading}
             >
-              {isLoading ? "Processing..." : "Upgrade to Pro"}
+              Upgrade to Pro
             </Button>
           </Card>
         </div>
@@ -181,7 +138,7 @@ export const PricingModal = ({ isOpen, onClose }: PricingModalProps) => {
         </div>
 
         <div className="text-center text-xs text-muted-foreground mt-4">
-          Secure payment powered by PayPal • Cancel anytime • 30-day money-back guarantee
+          Manual verification • Cancel anytime • 7-day refund policy
         </div>
       </DialogContent>
     </Dialog>

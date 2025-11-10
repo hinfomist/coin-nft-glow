@@ -4,9 +4,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProStatus } from "@/hooks/useProStatus";
 
 export const UserProfile = () => {
   const { user, logout, getPortfolioCount, getAlertsCount } = useAuth();
+  const { isPro, loading: proLoading, expiresAt } = useProStatus();
 
   if (!user) return null;
 
@@ -31,10 +33,13 @@ export const UserProfile = () => {
         <div>
           <div className="flex items-center justify-center gap-2 mb-2">
             <h3 className="text-xl font-semibold">{user.name}</h3>
-            <Badge variant={user.plan === 'pro' ? 'default' : 'secondary'} className="flex items-center gap-1">
-              {user.plan === 'pro' ? <Crown className="w-3 h-3" /> : null}
-              {user.plan === 'pro' ? 'Pro' : 'Free'}
+            <Badge variant={isPro ? 'default' : 'secondary'} className="flex items-center gap-1">
+              {isPro ? <Crown className="w-3 h-3" /> : null}
+              {isPro ? 'Pro' : 'Free'}
             </Badge>
+            {isPro && expiresAt && (
+              <span className="text-xs text-muted-foreground ml-2">{Math.max(0, Math.ceil((expiresAt.getTime() - Date.now())/86400000))} days left</span>
+            )}
           </div>
           <p className="text-muted-foreground">{user.email}</p>
           <p className="text-sm text-muted-foreground mt-1">

@@ -8,7 +8,9 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recha
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProStatus } from "@/hooks/useProStatus";
 import { PricingModal } from "@/components/PricingModal";
+import { AuthModal } from "@/components/AuthModal";
 import html2canvas from "html2canvas";
 
 interface PortfolioAsset {
@@ -31,11 +33,13 @@ interface HoldingFormData {
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444"];
 
 export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) => Promise<{ price: number; change24h: number; name: string; symbol: string; image: string }> }) => {
-  const { isAuthenticated, user, canAddHolding } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const { isPro, loading: proLoading } = useProStatus();
   const [portfolio, setPortfolio] = useState<PortfolioAsset[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<PortfolioAsset | null>(null);
   const [pricingModalOpen, setPricingModalOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [formData, setFormData] = useState<HoldingFormData>({
     coinId: "",
     quantity: "",
@@ -175,11 +179,24 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
   };
 
   const handleAddNew = () => {
-    if (!canAddHolding()) {
-      // Show upgrade prompt
+    // Only Pro users can add holdings. If not authenticated, open auth modal.
+    if (!isAuthenticated || !user) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    // While pro status is loading, block opening
+    if (proLoading) {
+      // optional: could show pricing modal to indicate locked state
+      return;
+    }
+
+    // Gate all adds for non-Pro users until they purchase/are approved
+    if (!isPro) {
       setPricingModalOpen(true);
       return;
     }
+
     setEditingAsset(null);
     setFormData({ coinId: "", quantity: "", purchasePrice: "" });
     setIsAddModalOpen(true);
@@ -206,22 +223,25 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
 
   if (!isAuthenticated) {
     return (
-      <Card className="p-8 text-center">
-        <div className="text-6xl mb-4">
-          <Lock className="w-16 h-16 mx-auto text-muted-foreground" />
-        </div>
-        <h3 className="text-xl font-semibold mb-2">Portfolio Tracking</h3>
-        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          Sign up for a free account to track your crypto portfolio, set price alerts, and get detailed P&L analysis.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button>Sign Up Free</Button>
-          <Button variant="outline">Login</Button>
-        </div>
-        <p className="text-sm text-muted-foreground mt-4">
-          Free forever • No credit card required
-        </p>
-      </Card>
+      <>
+        <Card className="p-8 text-center">
+          <div className="text-6xl mb-4">
+            <Lock className="w-16 h-16 mx-auto text-muted-foreground" />
+          </div>
+          <h3 className="text-xl font-semibold mb-2">Portfolio Tracking</h3>
+          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+            Sign up to track your crypto portfolio, set price alerts, and get detailed P&L analysis.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button onClick={() => setAuthModalOpen(true)}>Sign Up Free</Button>
+            <Button variant="outline" onClick={() => setAuthModalOpen(true)}>Login</Button>
+          </div>
+          <p className="text-sm text-muted-foreground mt-4">
+            Free forever • No credit card required
+          </p>
+        </Card>
+        <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+      </>
     );
   }
 
@@ -236,13 +256,14 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
             </p>
           </div>
           <div className="flex gap-2">
-            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={handleAddNew}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Holding
-                </Button>
-              </DialogTrigger>
+            <Dialog open={isAddModalOpen} onOpenChange={(open) => {
+              // Only allow closing via onOpenChange; prevent opening from uncontrolled events
+              if (!open) setIsAddModalOpen(false);
+            }}>
+              <Button onClick={handleAddNew}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Holding
+              </Button>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>{editingAsset ? "Edit Holding" : "Add New Holding"}</DialogTitle>
@@ -389,6 +410,11 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
               <Plus className="w-4 h-4 mr-2" />
               Add Your First Holding
             </Button>
+            {!isPro && (
+              <p className="text-sm text-muted-foreground mt-3">
+                Pro required to add holdings. Purchase a plan to unlock this feature.
+              </p>
+            )}
           </div>
         )}
       </Card>
@@ -398,6 +424,7 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
         isOpen={pricingModalOpen}
         onClose={() => setPricingModalOpen(false)}
       />
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </div>
   );
 };

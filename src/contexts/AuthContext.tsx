@@ -1,179 +1,214 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import CryptoJS from 'crypto-js';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 
 export interface User {
   id: string;
-  name: string;
+  name?: string;
   email: string;
-  createdAt: Date;
-  plan: 'free' | 'pro';
+  isPro: boolean;
+  proExpiresAt?: any;
+  planLimit?: number;
+  usageCount?: number;
+  createdAt?: Date;
 }
 
 interface AuthContextType {
   user: User | null;
+  firebaseUser: FirebaseUser | null;
   isAuthenticated: boolean;
+  isPro: boolean;
+  loading: boolean;
+  planLimit: number;
+  usageCount: number;
+  daysRemaining: number;
+  canUseFeature: () => boolean;
+  incrementUsage: () => Promise<void>;
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  getPortfolioCount: () => number;
-  getAlertsCount: () => number;
-  canAddHolding: () => boolean;
-  canAddAlert: () => boolean;
-  upgradeToPro: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const SALT = 'cryptoflash-salt-2024'; // In production, use environment variable
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // Listen to Firebase Auth state
   useEffect(() => {
-    // Check if user is logged in on app start
-    const savedUser = localStorage.getItem('cryptoflash-user');
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        setUser({
-          ...parsedUser,
-          createdAt: new Date(parsedUser.createdAt)
-        });
-      } catch (error) {
-        console.error('Failed to parse saved user:', error);
-        localStorage.removeItem('cryptoflash-user');
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setFirebaseUser(firebaseUser);
+      
+      if (firebaseUser) {
+        // User is logged in, fetch their Pro status from Firestore
+        fetchUserData(firebaseUser.email!);
+      } else {
+        // User is logged out
+        setUser(null);
+        setLoading(false);
       }
-    }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const hashPassword = (password: string): string => {
-    return CryptoJS.SHA256(password + SALT).toString();
+  // Fetch user data from Firestore and listen for real-time updates
+  const fetchUserData = (email: string) => {
+    const userRef = doc(db, 'users', email);
+    
+    // Real-time listener for user document
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const userData = docSnap.data();
+        setUser({
+          id: docSnap.id,
+          email: email,
+          name: userData.name,
+          isPro: userData.isPro || false,
+          proExpiresAt: userData.proExpiresAt,
+          planLimit: userData.planLimit || 30,
+          usageCount: userData.usageCount || 0,
+          createdAt: userData.createdAt?.toDate?.() || new Date(),
+        });
+      } else {
+        // User document doesn't exist, create a free user profile
+        setUser({
+          id: email,
+          email: email,
+          isPro: false,
+          planLimit: 5, // Free plan limit
+          usageCount: 0,
+        });
+      }
+      setLoading(false);
+    });
+
+    return unsubscribe;
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    const hashedPassword = hashPassword(password);
+  // Calculate days remaining for Pro subscription
+  const getDaysRemaining = (): number => {
+    if (!user?.isPro || !user?.proExpiresAt) return 0;
+    
+    const expiryDate = user.proExpiresAt.toDate ? user.proExpiresAt.toDate() : new Date(user.proExpiresAt);
+    const remaining = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return remaining > 0 ? remaining : 0;
+  };
 
-    // Get stored users
-    const users = JSON.parse(localStorage.getItem('cryptoflash-users') || '[]');
-    const foundUser = users.find((u: any) => u.email === email && u.password === hashedPassword);
-
-    if (foundUser) {
-      const userData: User = {
-        id: foundUser.id,
-        name: foundUser.name,
-        email: foundUser.email,
-        createdAt: new Date(foundUser.createdAt),
-        plan: foundUser.plan || 'free'
-      };
-
-      setUser(userData);
-      localStorage.setItem('cryptoflash-user', JSON.stringify(userData));
-      return true;
+  // Check if user can use Pro features
+  const canUseFeature = (): boolean => {
+    if (!user) return false;
+    
+    const daysRemaining = getDaysRemaining();
+    
+    // Pro user with active subscription
+    if (user.isPro && daysRemaining > 0) {
+      return (user.usageCount || 0) < (user.planLimit || 30);
     }
-
-    return false;
+    
+    // Free user
+    return (user.usageCount || 0) < 5; // Free limit
   };
 
-  const register = async (name: string, email: string, password: string): Promise<boolean> => {
-    const users = JSON.parse(localStorage.getItem('cryptoflash-users') || '[]');
+  // Increment usage counter
+  const incrementUsage = async () => {
+    if (!user) return;
+    
+    try {
+      const userRef = doc(db, 'users', user.email);
+      const currentCount = user.usageCount || 0;
+      
+      // Update Firestore (will trigger onSnapshot listener)
+      await updateDoc(userRef, {
+        usageCount: currentCount + 1,
+      });
+    } catch (error) {
+      console.error('Error incrementing usage:', error);
+    }
+  };
 
-    // Check if user already exists
-    if (users.some((u: any) => u.email === email)) {
+  // Login with Firebase
+  const login = async (email: string, password: string): Promise<boolean> => {
+    try {
+      console.log('🔐 Attempting login for:', email);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('✅ Login successful:', userCredential.user.email);
+      return true;
+    } catch (error: any) {
+      console.error('❌ Login error:', error.code, error.message);
       return false;
     }
-
-    const hashedPassword = hashPassword(password);
-    const newUser = {
-      id: Date.now().toString(),
-      name,
-      email,
-      password: hashedPassword,
-      createdAt: new Date().toISOString()
-    };
-
-    users.push(newUser);
-    localStorage.setItem('cryptoflash-users', JSON.stringify(users));
-
-    const userData: User = {
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email,
-      createdAt: new Date(newUser.createdAt),
-      plan: 'free'
-    };
-
-    setUser(userData);
-    localStorage.setItem('cryptoflash-user', JSON.stringify(userData));
-    return true;
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('cryptoflash-user');
-  };
-
-  const getPortfolioCount = (): number => {
-    if (!user) return 0;
-    const portfolio = localStorage.getItem(`cryptoflash-portfolio-${user.id}`);
-    if (!portfolio) return 0;
+  // Register with Firebase
+  const register = async (name: string, email: string, password: string): Promise<boolean> => {
     try {
-      const holdings = JSON.parse(portfolio);
-      return holdings.length;
-    } catch {
-      return 0;
+      console.log('📝 Attempting registration for:', email);
+      
+      // Create Firebase Auth account
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log('✅ Firebase Auth account created:', userCredential.user.email);
+      
+      // Create Firestore user document
+      const userRef = doc(db, 'users', email);
+      await setDoc(userRef, {
+        name: name,
+        email: email,
+        isPro: false,
+        planLimit: 5,
+        usageCount: 0,
+        createdAt: new Date(),
+      });
+      console.log('✅ Firestore user document created');
+      
+      return true;
+    } catch (error: any) {
+      console.error('❌ Registration error:', error.code, error.message);
+      
+      // Show specific error messages
+      if (error.code === 'auth/email-already-in-use') {
+        console.error('❌ Email already exists');
+      } else if (error.code === 'auth/weak-password') {
+        console.error('❌ Password too weak (min 6 characters)');
+      } else if (error.code === 'auth/invalid-email') {
+        console.error('❌ Invalid email format');
+      }
+      
+      return false;
     }
   };
 
-  const getAlertsCount = (): number => {
-    if (!user) return 0;
-    const alerts = localStorage.getItem(`cryptoflash-alerts-${user.id}`);
-    if (!alerts) return 0;
+  // Logout
+  const logout = async () => {
     try {
-      const alertList = JSON.parse(alerts);
-      return alertList.filter((alert: any) => alert.isActive).length;
-    } catch {
-      return 0;
+      await auth.signOut();
+      setUser(null);
+      setFirebaseUser(null);
+    } catch (error) {
+      console.error('Error logging out:', error);
     }
   };
 
-  const canAddHolding = (): boolean => {
-    if (!user) return false;
-    if (user.plan === 'pro') return true;
-    return getPortfolioCount() < 5; // Free plan limit
-  };
-
-  const canAddAlert = (): boolean => {
-    if (!user) return false;
-    if (user.plan === 'pro') return true;
-    return getAlertsCount() < 2; // Free plan limit
-  };
-
-  const upgradeToPro = () => {
-    if (!user) return;
-    const updatedUser = { ...user, plan: 'pro' as const };
-    setUser(updatedUser);
-    localStorage.setItem('cryptoflash-user', JSON.stringify(updatedUser));
-
-    // Update user in the users array
-    const users = JSON.parse(localStorage.getItem('cryptoflash-users') || '[]');
-    const userIndex = users.findIndex((u: any) => u.id === user.id);
-    if (userIndex !== -1) {
-      users[userIndex].plan = 'pro';
-      localStorage.setItem('cryptoflash-users', JSON.stringify(users));
-    }
-  };
+  const daysRemaining = getDaysRemaining();
+  const isPro = user?.isPro && daysRemaining > 0;
 
   const value: AuthContextType = {
     user,
-    isAuthenticated: !!user,
+    firebaseUser,
+    isAuthenticated: !!firebaseUser,
+    isPro: isPro || false,
+    loading,
+    planLimit: user?.planLimit || 5,
+    usageCount: user?.usageCount || 0,
+    daysRemaining,
+    canUseFeature,
+    incrementUsage,
     login,
     register,
     logout,
-    getPortfolioCount,
-    getAlertsCount,
-    canAddHolding,
-    canAddAlert,
-    upgradeToPro
   };
 
   return (
