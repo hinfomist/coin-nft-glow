@@ -22,7 +22,7 @@ interface AuthContextType {
   loading: boolean;
   planLimit: number;
   usageCount: number;
-  daysRemaining: number;
+  remainingDays: number;
   canUseFeature: () => boolean;
   incrementUsage: () => Promise<void>;
   login: (email: string, password: string) => Promise<boolean>;
@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setFirebaseUser(firebaseUser);
-      
+
       if (firebaseUser) {
         // User is logged in, fetch their Pro status from Firestore
         fetchUserData(firebaseUser.email!);
@@ -58,7 +58,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Fetch user data from Firestore and listen for real-time updates
   const fetchUserData = (email: string) => {
     const userRef = doc(db, 'users', email);
-    
+
     // Real-time listener for user document
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -90,9 +90,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Calculate days remaining for Pro subscription
-  const getDaysRemaining = (): number => {
+  const getremainingDays = (): number => {
     if (!user?.isPro || !user?.proExpiresAt) return 0;
-    
+
     const expiryDate = user.proExpiresAt.toDate ? user.proExpiresAt.toDate() : new Date(user.proExpiresAt);
     const remaining = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     return remaining > 0 ? remaining : 0;
@@ -101,14 +101,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Check if user can use Pro features
   const canUseFeature = (): boolean => {
     if (!user) return false;
-    
-    const daysRemaining = getDaysRemaining();
-    
+
+    const remainingDays = getremainingDays();
+
     // Pro user with active subscription
-    if (user.isPro && daysRemaining > 0) {
+    if (user.isPro && remainingDays > 0) {
       return (user.usageCount || 0) < (user.planLimit || 30);
     }
-    
+
     // Free user
     return (user.usageCount || 0) < 5; // Free limit
   };
@@ -116,11 +116,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Increment usage counter
   const incrementUsage = async () => {
     if (!user) return;
-    
+
     try {
       const userRef = doc(db, 'users', user.email);
       const currentCount = user.usageCount || 0;
-      
+
       // Update Firestore (will trigger onSnapshot listener)
       await updateDoc(userRef, {
         usageCount: currentCount + 1,
@@ -147,11 +147,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     try {
       console.log('📝 Attempting registration for:', email);
-      
+
       // Create Firebase Auth account
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       console.log('✅ Firebase Auth account created:', userCredential.user.email);
-      
+
       // Create Firestore user document
       const userRef = doc(db, 'users', email);
       await setDoc(userRef, {
@@ -163,11 +163,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createdAt: new Date(),
       });
       console.log('✅ Firestore user document created');
-      
+
       return true;
     } catch (error: any) {
       console.error('❌ Registration error:', error.code, error.message);
-      
+
       // Show specific error messages
       if (error.code === 'auth/email-already-in-use') {
         console.error('❌ Email already exists');
@@ -176,7 +176,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (error.code === 'auth/invalid-email') {
         console.error('❌ Invalid email format');
       }
-      
+
       return false;
     }
   };
@@ -192,8 +192,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const daysRemaining = getDaysRemaining();
-  const isPro = user?.isPro && daysRemaining > 0;
+  const remainingDays = getremainingDays();
+  const isPro = user?.isPro && remainingDays > 0;
 
   const value: AuthContextType = {
     user,
@@ -203,7 +203,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loading,
     planLimit: user?.planLimit || 5,
     usageCount: user?.usageCount || 0,
-    daysRemaining,
+    remainingDays,
     canUseFeature,
     incrementUsage,
     login,

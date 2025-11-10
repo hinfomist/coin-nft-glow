@@ -17,7 +17,7 @@ export const ProFeatureGate: React.FC<ProFeatureGateProps> = ({
     feature = 'this feature',
     showUpgrade = true
 }) => {
-    const { isPro, daysRemaining, user, loading } = useAuth();
+    const { isPro, remainingDays, user, loading } = useAuth();
     const navigate = useNavigate();
 
     if (loading) {
@@ -25,7 +25,7 @@ export const ProFeatureGate: React.FC<ProFeatureGateProps> = ({
     }
 
     // If user is Pro with active subscription, show the feature
-    if (isPro && daysRemaining > 0) {
+    if (isPro && remainingDays > 0) {
         return <>{children}</>;
     }
 
@@ -119,14 +119,14 @@ export const UsageLimitIndicator = () => {
 
 // Pro Badge Component
 export const ProBadge = () => {
-    const { isPro, daysRemaining } = useAuth();
+    const { isPro, remainingDays } = useAuth();
 
     if (!isPro) return null;
 
     return (
         <Badge variant="default" className="bg-gradient-to-r from-purple-500 to-blue-500">
             <Crown className="h-3 w-3 mr-1" />
-            Pro {daysRemaining > 0 && `(${daysRemaining} days)`}
+            Pro {remainingDays > 0 && `(${remainingDays} days)`}
         </Badge>
     );
 };

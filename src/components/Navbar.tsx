@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Moon, Sun, Share2, Menu, X, User, LogOut, CreditCard } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProStatus } from "@/hooks/useProStatus";
-import { AuthModal } from "./AuthModal";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
@@ -16,25 +15,11 @@ interface NavbarProps {
 }
 
 export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout } = useAuth();
   const { isPro, remainingDays } = useProStatus();
 
-  const navLinks = [
-    { path: "/", label: "Home" },
-    { path: "/app?tab=crypto", label: "Crypto" },
-    { path: "/app?tab=nft", label: "NFTs" },
-    { path: "/app?tab=portfolio", label: "Portfolio" },
-    { path: "/about", label: "About" },
-  ];
-
-  const handleMobileLinkClick = () => {
-    setIsMobileMenuOpen(false);
-  };
-
-  // ✅ FIXED: Handle undefined name
   const getInitials = (name: string | undefined) => {
     if (!name || !name.trim()) {
       return 'U'; // Default to 'U' for User
@@ -48,147 +33,179 @@ export const Navbar = ({ darkMode, onToggleDarkMode, onShare }: NavbarProps) => 
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
-  return (
-    <>
-      <header className="border-b border-border sticky top-0 bg-background/95 backdrop-blur-sm z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-3xl">⚡</span>
-            <Link to="/" className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              CryptoFlash
-            </Link>
-          </div>
+  const navLinks = [
+    { path: "/", label: "Home" },
+    { path: "/app?tab=crypto", label: "Crypto" },
+    { path: "/app?tab=nft", label: "NFTs" },
+    { path: "/app?tab=portfolio", label: "Portfolio" },
+    { path: "/about", label: "About" },
+  ];
 
-          <nav className="hidden md:flex items-center gap-6">
+  return (
+    <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto px-4">
+        <div className="flex h-16 items-center justify-between">
+          {/* Logo */}
+          <Link to="/" className="flex items-center gap-2 text-2xl font-bold hover:opacity-80 transition-opacity">
+            <span className="text-3xl">⚡</span>
+            <span className="bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+              CryptoFlash
+            </span>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-6">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
                 to={link.path}
-                className={`text-sm font-medium transition-colors hover:text-primary ${location.pathname === link.path ? "text-primary" : "text-muted-foreground"
+                className={`text-sm font-medium transition-colors hover:text-primary ${location.pathname === link.path || location.pathname + location.search === link.path
+                  ? "text-primary"
+                  : "text-muted-foreground"
                   }`}
               >
                 {link.label}
               </Link>
             ))}
-          </nav>
+          </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right Side Actions */}
+          <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
               onClick={onToggleDarkMode}
               className="rounded-full"
-              aria-label="Toggle dark mode"
             >
               {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </Button>
+
             <Button
               variant="ghost"
               size="icon"
               onClick={onShare}
-              className="rounded-full"
-              aria-label="Share"
+              className="rounded-full hidden sm:flex"
             >
               <Share2 className="w-5 h-5" />
             </Button>
 
-            {isAuthenticated ? (
+            {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="rounded-full p-1">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="text-sm">
-                        {getInitials(user?.name)}
+                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                    <Avatar className="h-10 w-10 border-2 border-primary">
+                      <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                        {getInitials(user.name)}
                       </AvatarFallback>
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <div className="px-2 py-1.5 text-sm font-medium flex items-center justify-between">
-                    <span>{user?.name || user?.email || 'User'}</span>
-                    {isPro && <Badge variant="premium">Pro</Badge>}
+                <DropdownMenuContent
+                  className="w-64 p-2"
+                  align="end"
+                  sideOffset={8}
+                >
+                  {/* User Info Section */}
+                  <div className="flex flex-col space-y-2 p-3 bg-muted/50 rounded-lg mb-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium leading-none">{user.email}</p>
+                      {isPro ? (
+                        <Badge className="bg-gradient-to-r from-purple-600 to-primary text-white">
+                          Pro
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Free</Badge>
+                      )}
+                    </div>
+                    {user.name && (
+                      <p className="text-xs text-muted-foreground">{user.name}</p>
+                    )}
                   </div>
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    {user?.email}
-                  </div>
-                  <DropdownMenuItem asChild>
-                    <Link to="/app?tab=portfolio" className="cursor-pointer">
-                      <User className="w-4 h-4 mr-2" />
-                      My Portfolio
+
+                  <DropdownMenuSeparator />
+
+                  {/* My Portfolio Link */}
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link
+                      to="/app?tab=portfolio"
+                      className="flex items-center py-2 px-2 hover:bg-accent rounded-md transition-colors"
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      <span className="flex-1">My Portfolio</span>
                     </Link>
                   </DropdownMenuItem>
-                  {isPro && (
-                    <DropdownMenuItem asChild>
-                      <Link to="/subscription" className="cursor-pointer">
-                        <CreditCard className="w-4 h-4 mr-2" />
-                        Subscription
-                        <span className="ml-auto text-xs text-muted-foreground">{remainingDays} days left</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={logout} className="cursor-pointer">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Logout
+
+                  {/* Subscription Info */}
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link
+                      to="/checkout"
+                      className="flex items-center py-2 px-2 hover:bg-accent rounded-md transition-colors"
+                    >
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      <div className="flex flex-col flex-1">
+                        <span>Subscription</span>
+                        {isPro && remainingDays !== null && (
+                          <span className="text-xs text-muted-foreground">
+                            {remainingDays} days left
+                          </span>
+                        )}
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+
+                  {/* Logout */}
+                  <DropdownMenuItem
+                    onClick={logout}
+                    className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400 focus:bg-red-50 dark:focus:bg-red-950/20 py-2 px-2 rounded-md transition-colors"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Logout</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <div className="hidden md:flex items-center gap-2">
-                <Button variant="ghost" onClick={() => setIsAuthModalOpen(true)}>
-                  Login
+              <Link to="/checkout">
+                <Button size="sm" className="rounded-full">
+                  Get Started
                 </Button>
-                <Button onClick={() => setIsAuthModalOpen(true)}>
-                  Sign Up
-                </Button>
-              </div>
+              </Link>
             )}
 
+            {/* Mobile Menu Button */}
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="rounded-full md:hidden"
-              aria-label="Toggle mobile menu"
+              className="md:hidden rounded-full"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
-              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </Button>
           </div>
         </div>
 
-        {/* Mobile Menu Overlay */}
-        {isMobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 top-16 bg-background/95 backdrop-blur-sm z-40">
-            <nav className="container mx-auto px-4 py-6">
-              <div className="flex flex-col gap-4">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.path}
-                    to={link.path}
-                    onClick={handleMobileLinkClick}
-                    className={`text-lg font-medium py-2 px-4 rounded-lg transition-colors hover:bg-accent ${location.pathname === link.path ? "text-primary bg-accent" : "text-foreground"
-                      }`}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-
-                {!isAuthenticated && (
-                  <div className="flex flex-col gap-2 pt-4 border-t">
-                    <Button variant="outline" onClick={() => { setIsAuthModalOpen(true); setIsMobileMenuOpen(false); }}>
-                      Login
-                    </Button>
-                    <Button onClick={() => { setIsAuthModalOpen(true); setIsMobileMenuOpen(false); }}>
-                      Sign Up
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </nav>
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden py-4 border-t">
+            <div className="flex flex-col space-y-3">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${location.pathname === link.path || location.pathname + location.search === link.path
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-accent"
+                    }`}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
           </div>
         )}
-      </header>
-
-      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
-    </>
+      </div>
+    </nav>
   );
 };
