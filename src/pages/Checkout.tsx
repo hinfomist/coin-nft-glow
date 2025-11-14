@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProStatus } from "@/hooks/useProStatus";
 import { AuthModal } from "@/components/AuthModal";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -23,10 +24,23 @@ interface FormData {
   agreeToTerms: boolean;
 }
 
+// ✅ FIXED: Changed error type to match boolean field
+interface FormErrors {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  country?: string;
+  confirmEmail?: string;
+  companyName?: string;
+  referralSource?: string;
+  agreeToTerms?: string; // Changed from boolean to string for error messages
+}
+
 const Checkout = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, isAuthenticated } = useAuth();
+  const { isPro, loading: proLoading } = useProStatus(); // ✅ ADDED
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<FormData>({
@@ -39,10 +53,21 @@ const Checkout = () => {
     referralSource: "",
     agreeToTerms: false,
   });
-  const [errors, setErrors] = useState<Partial<FormData>>({});
+  const [errors, setErrors] = useState<FormErrors>({});
+
+  // ✅ ADDED: Auto-redirect Pro users away from checkout
+  useEffect(() => {
+    if (!proLoading && isAuthenticated && isPro) {
+      toast({
+        title: "Already Pro!",
+        description: "You already have an active Pro subscription",
+      });
+      navigate('/app?tab=portfolio');
+    }
+  }, [isPro, proLoading, isAuthenticated, navigate, toast]);
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<FormData> = {};
+    const newErrors: FormErrors = {};
 
     if (!formData.fullName.trim()) newErrors.fullName = "Full name is required";
     if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
@@ -78,10 +103,8 @@ const Checkout = () => {
     setIsLoading(true);
 
     try {
-      // Generate unique order ID
       const orderId = `CRF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
-      // Store form data in localStorage
       const checkoutData = {
         ...formData,
         email: user?.email,
@@ -99,7 +122,6 @@ const Checkout = () => {
         description: "Redirecting to payment instructions...",
       });
 
-      // Navigate to payment instructions
       navigate('/payment-instructions');
     } catch (error) {
       console.error('Checkout error:', error);
@@ -128,9 +150,20 @@ const Checkout = () => {
     "Priority support"
   ];
 
+  // ✅ ADDED: Show loading state while checking Pro status
+  if (proLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <div className="border-b bg-card">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -150,7 +183,6 @@ const Checkout = () => {
 
       <div className="container mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
-          {/* Order Summary */}
           <div className="order-2 lg:order-1">
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-6">Order Summary</h2>
@@ -186,7 +218,6 @@ const Checkout = () => {
             </Card>
           </div>
 
-          {/* Customer Information Form */}
           <div className="order-1 lg:order-2">
             <Card className="p-6">
               <h2 className="text-xl font-semibold mb-6">Customer Information</h2>
@@ -198,158 +229,145 @@ const Checkout = () => {
                     <p className="text-muted-foreground">Please sign in to upgrade to CryptoFlash Pro</p>
                   </div>
                   <Button onClick={() => setShowAuthModal(true)} size="lg" className="w-full">Sign In / Sign Up</Button>
-                  {showAuthModal && (
-  <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-)}
                 </div>
               ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Full Name */}
-                <div>
-                  <Label htmlFor="fullName">Full Name *</Label>
-                  <Input
-                    id="fullName"
-                    value={formData.fullName}
-                    onChange={(e) => handleInputChange('fullName', e.target.value)}
-                    className={errors.fullName ? 'border-red-500' : ''}
-                  />
-                  {errors.fullName && <p className="text-sm text-red-500 mt-1">{errors.fullName}</p>}
-                </div>
-
-                {/* Email */}
-                <div>
-                  <Label htmlFor="email">Email Address *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={user?.email || ''}
-                    readOnly
-                    className="bg-muted"
-                    disabled
-                  />
-                </div>
-
-                {/* Confirm Email - locked */}
-                <div>
-                  <Label htmlFor="confirmEmail">Confirm Email *</Label>
-                  <Input
-                    id="confirmEmail"
-                    type="email"
-                    value={user?.email || ''}
-                    readOnly
-                    className="bg-muted"
-                    disabled
-                  />
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <Label htmlFor="phone">Phone Number *</Label>
-                  <div className="flex gap-2">
-                    <Select value="+92" disabled>
-                      <SelectTrigger className="w-20">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="+92">+92</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <Label htmlFor="fullName">Full Name *</Label>
                     <Input
-                      id="phone"
-                      value={formData.phone}
-                      onChange={(e) => handleInputChange('phone', e.target.value)}
-                      placeholder="300 123 4567"
-                      className={errors.phone ? 'border-red-500' : ''}
+                      id="fullName"
+                      value={formData.fullName}
+                      onChange={(e) => handleInputChange('fullName', e.target.value)}
+                      className={errors.fullName ? 'border-red-500' : ''}
+                    />
+                    {errors.fullName && <p className="text-sm text-red-500 mt-1">{errors.fullName}</p>}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="email">Email Address *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={user?.email || ''}
+                      readOnly
+                      className="bg-muted"
+                      disabled
                     />
                   </div>
-                  {errors.phone && <p className="text-sm text-red-500 mt-1">{errors.phone}</p>}
-                </div>
 
-                {/* Country */}
-                <div>
-                  <Label htmlFor="country">Country *</Label>
-                  <Select value={formData.country} onValueChange={(value) => handleInputChange('country', value)}>
-                    <SelectTrigger className={errors.country ? 'border-red-500' : ''}>
-                      <SelectValue placeholder="Select your country" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pakistan">Pakistan</SelectItem>
-                      <SelectItem value="usa">United States</SelectItem>
-                      <SelectItem value="uk">United Kingdom</SelectItem>
-                      <SelectItem value="canada">Canada</SelectItem>
-                      <SelectItem value="australia">Australia</SelectItem>
-                      <SelectItem value="germany">Germany</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {errors.country && <p className="text-sm text-red-500 mt-1">{errors.country}</p>}
-                </div>
+                  <div>
+                    <Label htmlFor="confirmEmail">Confirm Email *</Label>
+                    <Input
+                      id="confirmEmail"
+                      type="email"
+                      value={user?.email || ''}
+                      readOnly
+                      className="bg-muted"
+                      disabled
+                    />
+                  </div>
 
-                {/* Company Name */}
-                <div>
-                  <Label htmlFor="companyName">Company Name (Optional)</Label>
-                  <Input
-                    id="companyName"
-                    value={formData.companyName}
-                    onChange={(e) => handleInputChange('companyName', e.target.value)}
-                  />
-                </div>
+                  <div>
+                    <Label htmlFor="phone">Phone Number *</Label>
+                    <div className="flex gap-2">
+                      <Select value="+92" disabled>
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="+92">+92</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        placeholder="300 123 4567"
+                        className={errors.phone ? 'border-red-500' : ''}
+                      />
+                    </div>
+                    {errors.phone && <p className="text-sm text-red-500 mt-1">{errors.phone}</p>}
+                  </div>
 
-                {/* Referral Source */}
-                <div>
-                  <Label htmlFor="referralSource">How did you hear about us? (Optional)</Label>
-                  <Select value={formData.referralSource} onValueChange={(value) => handleInputChange('referralSource', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an option" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="google">Google</SelectItem>
-                      <SelectItem value="reddit">Reddit</SelectItem>
-                      <SelectItem value="twitter">Twitter</SelectItem>
-                      <SelectItem value="friend">Friend</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <div>
+                    <Label htmlFor="country">Country *</Label>
+                    <Select value={formData.country} onValueChange={(value) => handleInputChange('country', value)}>
+                      <SelectTrigger className={errors.country ? 'border-red-500' : ''}>
+                        <SelectValue placeholder="Select your country" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pakistan">Pakistan</SelectItem>
+                        <SelectItem value="usa">United States</SelectItem>
+                        <SelectItem value="uk">United Kingdom</SelectItem>
+                        <SelectItem value="canada">Canada</SelectItem>
+                        <SelectItem value="australia">Australia</SelectItem>
+                        <SelectItem value="germany">Germany</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {errors.country && <p className="text-sm text-red-500 mt-1">{errors.country}</p>}
+                  </div>
 
-                {/* Terms Checkbox */}
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id="agreeToTerms"
-                    checked={formData.agreeToTerms}
-                    onCheckedChange={(checked) => handleInputChange('agreeToTerms', checked as boolean)}
-                    className={errors.agreeToTerms ? 'border-red-500' : ''}
-                  />
-                  <Label htmlFor="agreeToTerms" className="text-sm leading-relaxed">
-                    I agree to the{" "}
-                    <a href="/terms" className="text-primary hover:underline" target="_blank">
-                      Terms of Service
-                    </a>{" "}
-                    and{" "}
-                    <a href="/privacy" className="text-primary hover:underline" target="_blank">
-                      Privacy Policy
-                    </a>
-                    *
-                  </Label>
-                </div>
-                {errors.agreeToTerms && <p className="text-sm text-red-500">{errors.agreeToTerms}</p>}
+                  <div>
+                    <Label htmlFor="companyName">Company Name (Optional)</Label>
+                    <Input
+                      id="companyName"
+                      value={formData.companyName}
+                      onChange={(e) => handleInputChange('companyName', e.target.value)}
+                    />
+                  </div>
 
-                {/* Submit Button */}
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isLoading}
-                  size="lg"
-                >
-                  {isLoading ? "Processing..." : "Proceed to Payment"}
-                </Button>
-              </form>
+                  <div>
+                    <Label htmlFor="referralSource">How did you hear about us? (Optional)</Label>
+                    <Select value={formData.referralSource} onValueChange={(value) => handleInputChange('referralSource', value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an option" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="google">Google</SelectItem>
+                        <SelectItem value="reddit">Reddit</SelectItem>
+                        <SelectItem value="twitter">Twitter</SelectItem>
+                        <SelectItem value="friend">Friend</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="agreeToTerms"
+                      checked={formData.agreeToTerms}
+                      onCheckedChange={(checked) => handleInputChange('agreeToTerms', checked as boolean)}
+                      className={errors.agreeToTerms ? 'border-red-500' : ''}
+                    />
+                    <Label htmlFor="agreeToTerms" className="text-sm leading-relaxed">
+                      I agree to the{" "}
+                      <a href="/terms" className="text-primary hover:underline" target="_blank">
+                        Terms of Service
+                      </a>{" "}
+                      and{" "}
+                      <a href="/privacy" className="text-primary hover:underline" target="_blank">
+                        Privacy Policy
+                      </a>
+                      *
+                    </Label>
+                  </div>
+                  {errors.agreeToTerms && <p className="text-sm text-red-500">{errors.agreeToTerms}</p>}
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isLoading}
+                    size="lg"
+                  >
+                    {isLoading ? "Processing..." : "Proceed to Payment"}
+                  </Button>
+                </form>
               )}
             </Card>
           </div>
         </div>
 
-        {/* Security Badges */}
         <div className="mt-8 flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4" />
@@ -365,6 +383,8 @@ const Checkout = () => {
           </div>
         </div>
       </div>
+
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 };
