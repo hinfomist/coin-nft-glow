@@ -11,6 +11,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useProStatus } from "@/hooks/useProStatus";
 import { PricingModal } from "@/components/PricingModal";
 import { AuthModal } from "@/components/AuthModal";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
 import html2canvas from "html2canvas";
 
 interface PortfolioAsset {
@@ -35,39 +38,93 @@ const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accen
 export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) => Promise<{ price: number; change24h: number; name: string; symbol: string; image: string }> }) => {
   const { isAuthenticated, user } = useAuth();
   const { isPro, loading: proLoading } = useProStatus();
+  const { toast } = useToast();
   const [portfolio, setPortfolio] = useState<PortfolioAsset[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<PortfolioAsset | null>(null);
   const [pricingModalOpen, setPricingModalOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<HoldingFormData>({
     coinId: "",
     quantity: "",
     purchasePrice: ""
   });
 
+  // ✅ Load portfolio from Firebase on mount
   useEffect(() => {
-    if (!isAuthenticated || !user) {
-      setPortfolio([]);
-      return;
-    }
-
-    const saved = localStorage.getItem(`cryptoflash-portfolio-${user.id}`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setPortfolio(parsed);
-      } catch (error) {
-        console.error("Failed to parse portfolio data:", error);
+    const loadPortfolio = async () => {
+      if (!isAuthenticated || !user) {
+        setPortfolio([]);
+        return;
       }
-    } else {
-      setPortfolio([]);
-    }
+
+      setIsLoading(true);
+      try {
+        const portfolioRef = doc(db, 'portfolios', user.email);
+        const portfolioSnap = await getDoc(portfolioRef);
+
+        if (portfolioSnap.exists()) {
+          const data = portfolioSnap.data();
+          setPortfolio(data.holdings || []);
+        } else {
+          // No portfolio in Firebase, check localStorage for migration
+          const saved = localStorage.getItem(`cryptoflash-portfolio-${user.id}`);
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              setPortfolio(parsed);
+              // Migrate to Firebase
+              await savePortfolioToFirebase(parsed);
+              // Clear old localStorage
+              localStorage.removeItem(`cryptoflash-portfolio-${user.id}`);
+            } catch (error) {
+              console.error("Failed to parse portfolio data:", error);
+            }
+          } else {
+            setPortfolio([]);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load portfolio:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load portfolio data",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPortfolio();
   }, [isAuthenticated, user]);
 
+  // ✅ Save portfolio to Firebase whenever it changes
+  const savePortfolioToFirebase = async (holdings: PortfolioAsset[]) => {
+    if (!isAuthenticated || !user) return;
+
+    try {
+      const portfolioRef = doc(db, 'portfolios', user.email);
+      await setDoc(portfolioRef, {
+        holdings: holdings,
+        updatedAt: serverTimestamp(),
+        userEmail: user.email,
+      }, { merge: true });
+    } catch (error) {
+      console.error("Failed to save portfolio:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save portfolio data",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ✅ Auto-save to Firebase when portfolio changes
   useEffect(() => {
-    if (isAuthenticated && user && portfolio.length > 0) {
-      localStorage.setItem(`cryptoflash-portfolio-${user.id}`, JSON.stringify(portfolio));
+    if (isAuthenticated && user && portfolio.length >= 0 && !isLoading) {
+      savePortfolioToFirebase(portfolio);
     }
   }, [portfolio, isAuthenticated, user]);
 
@@ -110,6 +167,11 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
     const price = parseFloat(formData.purchasePrice);
 
     if (!formData.coinId || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
+      toast({
+        title: "Invalid input",
+        description: "Please enter valid quantity and price",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -121,17 +183,21 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
         setPortfolio(prev => prev.map(asset =>
           asset.id === editingAsset.id
             ? {
-                ...asset,
-                quantity: qty,
-                purchasePrice: price,
-                currentPrice: data.price,
-                change24h: data.change24h,
-                name: data.name,
-                symbol: data.symbol,
-                image: data.image
-              }
+              ...asset,
+              quantity: qty,
+              purchasePrice: price,
+              currentPrice: data.price,
+              change24h: data.change24h,
+              name: data.name,
+              symbol: data.symbol,
+              image: data.image
+            }
             : asset
         ));
+        toast({
+          title: "Success",
+          description: "Holding updated successfully",
+        });
       } else {
         // Add new
         const existing = portfolio.find(a => a.id === data.name.toLowerCase().replace(/\s+/g, "-"));
@@ -154,6 +220,10 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
           };
           setPortfolio(prev => [...prev, newAsset]);
         }
+        toast({
+          title: "Success",
+          description: "Holding added successfully",
+        });
       }
 
       setFormData({ coinId: "", quantity: "", purchasePrice: "" });
@@ -161,6 +231,11 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
       setEditingAsset(null);
     } catch (error) {
       console.error("Failed to add/edit asset:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch coin data. Please check the coin name and try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -176,6 +251,10 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
 
   const handleDelete = (id: string) => {
     setPortfolio(prev => prev.filter(asset => asset.id !== id));
+    toast({
+      title: "Success",
+      description: "Holding deleted successfully",
+    });
   };
 
   const handleAddNew = () => {
@@ -187,7 +266,6 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
 
     // While pro status is loading, block opening
     if (proLoading) {
-      // optional: could show pricing modal to indicate locked state
       return;
     }
 
@@ -245,6 +323,15 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
     );
   }
 
+  if (isLoading) {
+    return (
+      <Card className="p-12 text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+        <p className="text-muted-foreground">Loading your portfolio...</p>
+      </Card>
+    );
+  }
+
   return (
     <div>
       <Card className="p-6 mb-6">
@@ -257,7 +344,6 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
           </div>
           <div className="flex gap-2">
             <Dialog open={isAddModalOpen} onOpenChange={(open) => {
-              // Only allow closing via onOpenChange; prevent opening from uncontrolled events
               if (!open) setIsAddModalOpen(false);
             }}>
               <Button onClick={handleAddNew}>
@@ -419,7 +505,6 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
         )}
       </Card>
 
-      {/* Pricing Modal */}
       <PricingModal
         isOpen={pricingModalOpen}
         onClose={() => setPricingModalOpen(false)}
