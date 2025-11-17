@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Trash2, Download, Plus, Edit, Lock } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Trash2, Download, Plus, Edit, Lock, Search, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { useProStatus } from "@/hooks/useProStatus";
 import { PricingModal } from "@/components/PricingModal";
 import { AuthModal } from "@/components/AuthModal";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import html2canvas from "html2canvas";
 
@@ -29,8 +29,19 @@ interface PortfolioAsset {
 
 interface HoldingFormData {
   coinId: string;
+  coinName: string;
+  coinSymbol: string;
+  coinImage: string;
   quantity: string;
   purchasePrice: string;
+}
+
+interface CoinSearchResult {
+  id: string;
+  name: string;
+  symbol: string;
+  thumb: string;
+  market_cap_rank: number;
 }
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "#8b5cf6", "#f59e0b", "#10b981", "#ef4444"];
@@ -47,72 +58,132 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<HoldingFormData>({
     coinId: "",
+    coinName: "",
+    coinSymbol: "",
+    coinImage: "",
     quantity: "",
     purchasePrice: ""
   });
 
-  // ✅ Load portfolio from Firebase on mount
+  // Coin search state
+  const [coinSearchOpen, setCoinSearchOpen] = useState(false);
+  const [coinSearchQuery, setCoinSearchQuery] = useState("");
+  const [coinSearchResults, setCoinSearchResults] = useState<CoinSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Refs for managing intervals and timeouts
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const priceUpdateIntervalRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // ✅ Real-time Firebase listener for cross-tab sync
   useEffect(() => {
-    const loadPortfolio = async () => {
-      if (!isAuthenticated || !user) {
-        setPortfolio([]);
-        return;
-      }
+    if (!isAuthenticated || !user || !user.email) {
+      setPortfolio([]);
+      return;
+    }
 
-      setIsLoading(true);
-      try {
-        const portfolioRef = doc(db, 'portfolios', user.email);
-        const portfolioSnap = await getDoc(portfolioRef);
+    setIsLoading(true);
+    console.log('📡 Setting up real-time listener for:', user.email);
 
-        if (portfolioSnap.exists()) {
-          const data = portfolioSnap.data();
+    const portfolioRef = doc(db, 'portfolios', user.email);
+
+    const unsubscribe = onSnapshot(
+      portfolioRef,
+      (docSnap) => {
+        setIsLoading(false);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          console.log('✅ Portfolio loaded from Firebase:', data.holdings?.length || 0, 'holdings');
           setPortfolio(data.holdings || []);
         } else {
-          // No portfolio in Firebase, check localStorage for migration
-          const saved = localStorage.getItem(`cryptoflash-portfolio-${user.id}`);
-          if (saved) {
-            try {
-              const parsed = JSON.parse(saved);
-              setPortfolio(parsed);
-              // Migrate to Firebase
-              await savePortfolioToFirebase(parsed);
-              // Clear old localStorage
-              localStorage.removeItem(`cryptoflash-portfolio-${user.id}`);
-            } catch (error) {
-              console.error("Failed to parse portfolio data:", error);
-            }
-          } else {
-            setPortfolio([]);
-          }
+          console.log('📭 No portfolio found, starting fresh');
+          setPortfolio([]);
         }
-      } catch (error) {
-        console.error("Failed to load portfolio:", error);
+      },
+      (error) => {
+        console.error('❌ Failed to load portfolio:', error);
+        setIsLoading(false);
         toast({
           title: "Error",
           description: "Failed to load portfolio data",
           variant: "destructive",
         });
-      } finally {
-        setIsLoading(false);
+      }
+    );
+
+    return () => {
+      console.log('🔌 Disconnecting portfolio listener');
+      unsubscribe();
+    };
+  }, [isAuthenticated, user?.email]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setCoinSearchOpen(false);
       }
     };
 
-    loadPortfolio();
-  }, [isAuthenticated, user]);
+    if (coinSearchOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
 
-  // ✅ Save portfolio to Firebase whenever it changes
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [coinSearchOpen]);
+
+  // ✅ Search coins from CoinGecko API
+  useEffect(() => {
+    if (!coinSearchQuery || coinSearchQuery.length < 2) {
+      setCoinSearchResults([]);
+      return;
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const response = await fetch(`https://api.coingecko.com/api/v3/search?query=${coinSearchQuery}`);
+        const data = await response.json();
+
+        const topCoins = data.coins?.slice(0, 10) || [];
+        setCoinSearchResults(topCoins);
+      } catch (error) {
+        console.error('Failed to search coins:', error);
+        setCoinSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [coinSearchQuery]);
+
   const savePortfolioToFirebase = async (holdings: PortfolioAsset[]) => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !user || !user.email) return;
 
     try {
+      console.log('💾 Saving portfolio to Firebase...', holdings.length, 'holdings');
       const portfolioRef = doc(db, 'portfolios', user.email);
       await setDoc(portfolioRef, {
         holdings: holdings,
         updatedAt: serverTimestamp(),
         userEmail: user.email,
       }, { merge: true });
+      console.log('✅ Portfolio saved successfully');
     } catch (error) {
-      console.error("Failed to save portfolio:", error);
+      console.error("❌ Failed to save portfolio:", error);
       toast({
         title: "Error",
         description: "Failed to save portfolio data",
@@ -121,44 +192,79 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
     }
   };
 
-  // ✅ Auto-save to Firebase when portfolio changes
   useEffect(() => {
-    if (isAuthenticated && user && portfolio.length >= 0 && !isLoading) {
-      savePortfolioToFirebase(portfolio);
-    }
-  }, [portfolio, isAuthenticated, user]);
+    if (!isAuthenticated || !user || isLoading) return;
 
-  // Real-time price updates
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      savePortfolioToFirebase(portfolio);
+    }, 500);
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [portfolio, isAuthenticated, user?.email, isLoading]);
+
   useEffect(() => {
     const updatePrices = async () => {
       if (portfolio.length === 0) return;
 
-      const updatedPortfolio = await Promise.all(
-        portfolio.map(async (asset) => {
-          try {
-            const data = await onFetchPrice(asset.id);
-            return {
-              ...asset,
-              currentPrice: data.price,
-              change24h: data.change24h,
-              name: data.name,
-              symbol: data.symbol,
-              image: data.image
-            };
-          } catch (error) {
-            console.error(`Failed to update price for ${asset.id}:`, error);
-            return asset;
-          }
-        })
-      );
+      try {
+        const updatedPortfolio = await Promise.all(
+          portfolio.map(async (asset) => {
+            try {
+              const data = await onFetchPrice(asset.id);
+              return {
+                ...asset,
+                currentPrice: data.price,
+                change24h: data.change24h,
+              };
+            } catch (error) {
+              console.error(`Failed to update price for ${asset.id}:`, error);
+              return asset;
+            }
+          })
+        );
 
-      setPortfolio(updatedPortfolio);
+        const pricesChanged = updatedPortfolio.some((asset, idx) =>
+          asset.currentPrice !== portfolio[idx]?.currentPrice
+        );
+
+        if (pricesChanged) {
+          setPortfolio(updatedPortfolio);
+        }
+      } catch (error) {
+        console.error('Price update failed:', error);
+      }
     };
 
-    updatePrices();
-    const interval = setInterval(updatePrices, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
+    const initialTimeout = setTimeout(updatePrices, 2000);
+    priceUpdateIntervalRef.current = setInterval(updatePrices, 30000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      if (priceUpdateIntervalRef.current) {
+        clearInterval(priceUpdateIntervalRef.current);
+      }
+    };
   }, [portfolio.length, onFetchPrice]);
+
+  const handleCoinSelect = (coin: CoinSearchResult) => {
+    setFormData(prev => ({
+      ...prev,
+      coinId: coin.id,
+      coinName: coin.name,
+      coinSymbol: coin.symbol,
+      coinImage: coin.thumb
+    }));
+    setCoinSearchOpen(false);
+    setCoinSearchQuery("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,17 +275,16 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
     if (!formData.coinId || isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
       toast({
         title: "Invalid input",
-        description: "Please enter valid quantity and price",
+        description: "Please select a coin and enter valid quantity and price",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      const data = await onFetchPrice(formData.coinId.toLowerCase().replace(/\s+/g, "-"));
+      const data = await onFetchPrice(formData.coinId);
 
       if (editingAsset) {
-        // Edit existing
         setPortfolio(prev => prev.map(asset =>
           asset.id === editingAsset.id
             ? {
@@ -199,8 +304,7 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
           description: "Holding updated successfully",
         });
       } else {
-        // Add new
-        const existing = portfolio.find(a => a.id === data.name.toLowerCase().replace(/\s+/g, "-"));
+        const existing = portfolio.find(a => a.id === formData.coinId);
         if (existing) {
           setPortfolio(prev => prev.map(asset =>
             asset.id === existing.id
@@ -209,7 +313,7 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
           ));
         } else {
           const newAsset: PortfolioAsset = {
-            id: data.name.toLowerCase().replace(/\s+/g, "-"),
+            id: formData.coinId,
             name: data.name,
             symbol: data.symbol,
             image: data.image,
@@ -226,14 +330,21 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
         });
       }
 
-      setFormData({ coinId: "", quantity: "", purchasePrice: "" });
+      setFormData({
+        coinId: "",
+        coinName: "",
+        coinSymbol: "",
+        coinImage: "",
+        quantity: "",
+        purchasePrice: ""
+      });
       setIsAddModalOpen(false);
       setEditingAsset(null);
     } catch (error) {
       console.error("Failed to add/edit asset:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch coin data. Please check the coin name and try again.",
+        description: "Failed to fetch coin data. Please try again.",
         variant: "destructive",
       });
     }
@@ -242,7 +353,10 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
   const handleEdit = (asset: PortfolioAsset) => {
     setEditingAsset(asset);
     setFormData({
-      coinId: asset.name,
+      coinId: asset.id,
+      coinName: asset.name,
+      coinSymbol: asset.symbol,
+      coinImage: asset.image,
       quantity: asset.quantity.toString(),
       purchasePrice: asset.purchasePrice.toString()
     });
@@ -258,25 +372,29 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
   };
 
   const handleAddNew = () => {
-    // Only Pro users can add holdings. If not authenticated, open auth modal.
     if (!isAuthenticated || !user) {
       setAuthModalOpen(true);
       return;
     }
 
-    // While pro status is loading, block opening
     if (proLoading) {
       return;
     }
 
-    // Gate all adds for non-Pro users until they purchase/are approved
     if (!isPro) {
       setPricingModalOpen(true);
       return;
     }
 
     setEditingAsset(null);
-    setFormData({ coinId: "", quantity: "", purchasePrice: "" });
+    setFormData({
+      coinId: "",
+      coinName: "",
+      coinSymbol: "",
+      coinImage: "",
+      quantity: "",
+      purchasePrice: ""
+    });
     setIsAddModalOpen(true);
   };
 
@@ -344,7 +462,12 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
           </div>
           <div className="flex gap-2">
             <Dialog open={isAddModalOpen} onOpenChange={(open) => {
-              if (!open) setIsAddModalOpen(false);
+              if (!open) {
+                setIsAddModalOpen(false);
+                setCoinSearchQuery("");
+                setCoinSearchResults([]);
+                setCoinSearchOpen(false);
+              }
             }}>
               <Button onClick={handleAddNew}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -356,14 +479,85 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <Label htmlFor="coinId">Coin Name</Label>
-                    <Input
-                      id="coinId"
-                      placeholder="e.g., bitcoin, ethereum"
-                      value={formData.coinId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, coinId: e.target.value }))}
-                      required
-                    />
+                    <Label htmlFor="coinId">Select Coin</Label>
+                    <div className="relative" ref={dropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setCoinSearchOpen(!coinSearchOpen)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm border rounded-md bg-background hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                      >
+                        {formData.coinName ? (
+                          <div className="flex items-center gap-2">
+                            <img src={formData.coinImage} alt={formData.coinName} className="w-5 h-5 rounded-full" />
+                            <span>{formData.coinName}</span>
+                            <span className="text-muted-foreground">({formData.coinSymbol.toUpperCase()})</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">Search for a coin...</span>
+                        )}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </button>
+
+                      {coinSearchOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-[300px] overflow-hidden">
+                          <div className="flex items-center border-b px-3 py-2">
+                            <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                            <input
+                              type="text"
+                              placeholder="Search Bitcoin, Ethereum..."
+                              value={coinSearchQuery}
+                              onChange={(e) => setCoinSearchQuery(e.target.value)}
+                              className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground"
+                              autoFocus
+                            />
+                            {coinSearchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setCoinSearchQuery("")}
+                                className="ml-2 hover:bg-accent rounded p-1"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="overflow-y-auto max-h-[250px]">
+                            {isSearching ? (
+                              <div className="py-6 text-center text-sm text-muted-foreground">
+                                Searching...
+                              </div>
+                            ) : coinSearchResults.length > 0 ? (
+                              <div className="p-1">
+                                {coinSearchResults.map((coin) => (
+                                  <button
+                                    key={coin.id}
+                                    type="button"
+                                    onClick={() => handleCoinSelect(coin)}
+                                    className="w-full flex items-center gap-3 px-2 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                                  >
+                                    <img src={coin.thumb} alt={coin.name} className="w-6 h-6 rounded-full" />
+                                    <div className="flex-1 text-left">
+                                      <div className="font-medium">{coin.name}</div>
+                                      <div className="text-xs text-muted-foreground">{coin.symbol.toUpperCase()}</div>
+                                    </div>
+                                    {coin.market_cap_rank && (
+                                      <div className="text-xs text-muted-foreground">#{coin.market_cap_rank}</div>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : coinSearchQuery.length >= 2 ? (
+                              <div className="py-6 text-center text-sm text-muted-foreground">
+                                No coins found.
+                              </div>
+                            ) : (
+                              <div className="py-6 text-center text-sm text-muted-foreground">
+                                Type at least 2 characters to search
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="quantity">Quantity</Label>
@@ -393,7 +587,7 @@ export const PortfolioTable = ({ onFetchPrice }: { onFetchPrice: (id: string) =>
                     <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit">
+                    <Button type="submit" disabled={!formData.coinId}>
                       {editingAsset ? "Update" : "Add"} Holding
                     </Button>
                   </div>
