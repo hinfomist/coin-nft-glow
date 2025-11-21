@@ -17,12 +17,14 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        navigate("/admin/login");
+        setLoading(false);
+        navigate("/admin/login", { replace: true });
         return;
       }
 
       if (user.uid !== ADMIN_UID) {
-        navigate("/admin/login");
+        setLoading(false);
+        navigate("/admin/login", { replace: true });
         return;
       }
 
