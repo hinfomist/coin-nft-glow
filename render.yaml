@@ -8,3 +8,8 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+```
+
+### **Step 2: Verify `public/_redirects`**
+```
+/*    /index.html   200
