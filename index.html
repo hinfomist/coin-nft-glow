@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <base href="/" /> <!-- ✅ ADDed THIS LINE -->
+  <base href="/" />
   <title>CryptoFlash - Real-Time Crypto Portfolio Tracker & Price Alerts</title>
   <meta name="description"
     content="Track cryptocurrency prices in real-time with advanced portfolio analytics, smart price alerts, and P&L calculations. Free forever with Pro upgrade available. No ads, no signup required." />
@@ -45,6 +45,21 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- ✅ SPA Routing Fix for Static Hosts -->
+  <script>
+    // Handle /index.html redirects for SPA routing
+    (function () {
+      var path = window.location.pathname;
+      var search = window.location.search;
+
+      // If we're on /index.html, redirect to the root
+      if (path === '/index.html') {
+        var actualPath = search.replace('?redirect=', '') || '/';
+        window.history.replaceState(null, '', actualPath + window.location.hash);
+      }
+    })();
+  </script>
 </head>
 
 <body>
