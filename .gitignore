@@ -1,4 +1,8 @@
 # Logs
+# Ignore environment variables file
+# Store sensitive information, but not committed to the repository
+.env
+
 logs
 *.log
 npm-debug.log*
@@ -21,4 +25,3 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?

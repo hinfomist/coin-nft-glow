@@ -270,3 +270,25 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Built with ❤️ by [Hamza Aslam](https://twitter.com/hamzaaslam)**
 
 *Track your crypto portfolio like a pro - free forever, upgrade for premium features.*
+
+---
+
+## Environment Variables Setup
+
+To configure the Firebase application, you need to set up the following environment variables:
+
+- `VITE_FIREBASE_API_KEY`: Your Firebase API key.
+- `VITE_FIREBASE_AUTH_DOMAIN`: Your Firebase Auth domain.
+- `VITE_FIREBASE_PROJECT_ID`: Your Firebase project ID.
+- `VITE_FIREBASE_STORAGE_BUCKET`: Your Firebase storage bucket.
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`: Your Firebase messaging sender ID.
+- `VITE_FIREBASE_APP_ID`: Your Firebase app ID.
+- `VITE_FIREBASE_MEASUREMENT_ID`: Your Firebase measurement ID.
+
+### Render Deployment Instructions
+
+1.  Go to [Render](https://render.com) and create an account or log in.
+2.  Create a new web service and connect your GitHub repository.
+3.  In the Render dashboard, go to the environment variables section.
+4.  Add the environment variables listed above with their corresponding values.
+5.  Deploy your application.

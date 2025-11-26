@@ -3,13 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
-const ADMIN_UID = "nPIAdCYivzflUvIZO1PST0UJPIx1";
+const adminUID = import.meta.env.VITE_ADMIN_UID || "nPIAdCYivzflUvIZO1PST0UJPIx1";
+console.log('🔐 [AdminRoute] Admin UID from env:', adminUID);
 
 interface AdminRouteProps {
   children: React.ReactNode;
 }
 
 const AdminRoute = ({ children }: AdminRouteProps) => {
+  console.log("🔍 AdminRoute: rendering");
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -22,7 +24,7 @@ const AdminRoute = ({ children }: AdminRouteProps) => {
         return;
       }
 
-      if (user.uid !== ADMIN_UID) {
+      if (user.uid !== adminUID) {
         setLoading(false);
         navigate("/admin/login", { replace: true });
         return;
