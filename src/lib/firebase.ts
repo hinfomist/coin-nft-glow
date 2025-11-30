@@ -13,7 +13,30 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-T14MV6HFMX"
 };
 
+// Log which config source is being used
+console.log('🔥 [Firebase] Initializing with config from:', 
+  import.meta.env.VITE_FIREBASE_API_KEY ? 'Environment Variables' : 'Fallback Values'
+);
+
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// Initialize Auth and Firestore (critical services)
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const analytics = getAnalytics(app);
+
+console.log('🔥 [Firebase] Auth initialized:', auth ? '✅' : '❌');
+console.log('🔥 [Firebase] Firestore initialized:', db ? '✅' : '❌');
+
+// Initialize Analytics (optional - won't break app if blocked)
+let analytics;
+try {
+  analytics = getAnalytics(app);
+  console.log('🔥 [Firebase] Analytics initialized: ✅');
+} catch (error) {
+  console.warn('⚠️ [Firebase] Analytics blocked by ad blocker or privacy extension. App will continue without analytics.');
+  console.warn('⚠️ [Firebase] Error details:', error);
+  analytics = undefined;
+}
+
+export { analytics };
