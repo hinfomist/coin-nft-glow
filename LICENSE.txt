@@ -1,0 +1,69 @@
+Personal & Commercial License
+
+Copyright (c) 2026[cryptoflashr]
+
+PERMISSION GRANTED TO:
+
+✅ USE FOR PERSONAL PROJECTS
+You may use this software for any personal projects, websites, or applications.
+
+✅ USE FOR COMMERCIAL PROJECTS  
+You may use this software for commercial purposes, including:
+- Client websites and applications
+- SaaS products and services
+- Business internal tools
+- Commercial websites
+
+✅ MODIFY AND CUSTOMIZE
+You may modify the code to suit your specific needs, including:
+- Changing colors, layouts, and designs
+- Adding new features and functionality  
+- Removing features you don't need
+- Integrating with other systems
+
+✅ DEPLOY TO YOUR DOMAINS
+You may deploy the software on your own domains and servers:
+- Unlimited domains and subdomains
+- Any hosting provider (Render, Vercel, Netlify, AWS, etc.)
+- Multiple instances for different projects
+
+✅ RESELL TO CLIENTS (WITH MODIFICATIONS)
+You may use this as a base to build websites/apps for clients, provided:
+- You make significant modifications
+- You don't resell the source code directly
+- You deliver as a completed service/website
+
+YOU MAY NOT:
+
+❌ RESELL THE SOURCE CODE
+You may not resell, redistribute, or give away the source code as-is or with minor modifications.
+
+❌ CREATE TEMPLATE PRODUCTS
+You may not use this code to create competing template products or themes for sale.
+
+❌ SHARE WITH OTHERS
+You may not share your purchase with friends, teams, or organizations. Each user needs their own license.
+
+❌ CLAIM AUTHORSHIP
+You may not claim that you created the original codebase.
+
+TERMS:
+
+1. This license is perpetual - you own it forever
+2. You get free lifetime updates for this major version
+3. Support is provided via email for 30 days from purchase
+4. No refunds for digital products after download
+
+SUPPORT:
+For setup help, customization questions, or technical issues:
+Email: your-email@example.com
+Response time: 24-48 hours
+
+DISCLAIMER:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. 
+The author is not liable for any damages or data loss from using this software.
+
+---
+
+Need an extended license for teams or reselling rights?
+Contact:hamzaaslam645555@gmail.com

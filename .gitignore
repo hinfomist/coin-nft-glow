@@ -1,8 +1,27 @@
-# Logs
-# Ignore environment variables file
-# Store sensitive information, but not committed to the repository
+# Environment variables
 .env
+.env.local
+.env.production
 
+# Keep example file for documentation
+!.env.example
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+build
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (optional - you can keep these if you want)
 logs
 *.log
 npm-debug.log*
@@ -10,18 +29,3 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
